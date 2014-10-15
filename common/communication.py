@@ -1,33 +1,32 @@
-import os
-import re
-import select
 import socket
 import ssl
 
 from common import path
 
+# SSL reference: http://carlo-hamalainen.net/blog/2013/1/24/python-ssl-socket-echo-test-with-self-signed-certificate
 
 DEFAULT_PORT = 8000
 MAX_LISTEN = 5
 PROTOCOL_PACKET_SIZE = 4096
-PROTOCOL_TERMINATOR = '\0'
+PROTOCOL_TERMINATOR = '\r\n'
 PROTOCOL_DELIMITER = '\t'
 
 
 class TinyDataSocket(object):
 
-    def __init__(self, sock=None, is_readable=False, is_writeable=False):
+    def __init__(self, sock=None, is_readable=False, is_writeable=False, use_ssl=False):
         self.is_readable = is_readable
         self.is_writeable = is_writeable
         self.is_accepted = False
         if not sock:
             # Set up the socket
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.socket = ssl.wrap_socket(self.socket, keyfile=None, certfile=None,
-        #                               server_side=False, cert_reqs=ssl.CERT_REQUIRED,
-        #                               ca_certs=None, do_handshake_on_connect=True)
-        else:
-            self.socket = sock
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = sock
+        if use_ssl:
+            self.socket = ssl.wrap_socket(sock, keyfile=path.get_ssl_key(), certfile=path.get_ssl_cert(),
+                                          cert_reqs=ssl.CERT_REQUIRED, ca_certs=path.get_ssl_cacerts(),
+                                          do_handshake_on_connect=True)
+        self.socket.setblocking(0)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     # Pass through methods
@@ -37,17 +36,11 @@ class TinyDataSocket(object):
     def connect(self, *args):
         return self.socket.connect(*args)
 
-    def fileno(self, *args):
-        return self.socket.fileno(*args)
-
     def recv(self, *args):
         return self.socket.recv(*args)
 
     def send(self, *args):
         return self.socket.send(*args)
-
-    def read(self, *args):
-        return self.socket.read(*args)
 
     def listen(self, server='', port=DEFAULT_PORT):
         self.socket.bind((server, port))
@@ -84,8 +77,8 @@ class TinyDataSocket(object):
 
 class TinyDataProtocolSocket(TinyDataSocket):
 
-    def __init__(self, protocol, socket=None):
-        TinyDataSocket.__init__(self, socket, True, True)
+    def __init__(self, protocol, socket=None, use_ssl=False):
+        TinyDataSocket.__init__(self, socket, True, True, use_ssl)
         self.protocol = protocol
         self.read_buffer = ''
         self.write_buffer = ''
@@ -122,14 +115,16 @@ class TinyDataProtocol(object):
     protocol commands are of the form ["command", "...", "...", ...]
     """
 
-    def __init__(self):
+    def __init__(self, terminator=PROTOCOL_TERMINATOR, delimiter=PROTOCOL_DELIMITER):
         self.commands = {}
+        self.terminator = terminator
+        self.delimiter = delimiter
 
     def get_terminator(self):
-        return PROTOCOL_TERMINATOR
+        return self.terminator
 
     def get_delimiter(self):
-        return PROTOCOL_DELIMITER
+        return self.delimiter
 
     def handle_command(self, socket, command):
         if command[0] in self.commands:
@@ -138,12 +133,12 @@ class TinyDataProtocol(object):
                 handle_fn(socket, command[1:])
 
     def serialize_command(self, command):
-        return self.get_delimiter().join(command) + self.get_terminator()
+        return self.delimiter.join(command) + self.terminator
 
     def deserialize_command(self, command):
-        return command.split(self.get_delimiter())
+        return command.split(self.delimiter)
 
     def validate_command(self, command):
         for piece in command:
-            if self.get_terminator() in piece or self.get_delimiter() in piece:
+            if self.terminator in piece or self.delimiter in piece:
                 raise Exception('Command cannot contain protocol delimiter or terminator')
