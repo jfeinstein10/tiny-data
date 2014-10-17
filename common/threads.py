@@ -8,13 +8,24 @@ from common.communication import TinyDataSocket, TinyDataProtocolSocket
 DEFAULT_TIMEOUT = 10
 
 
-class ProtocolServer(Thread):
+class ProtocolThread(Thread):
 
-    def __init__(self, protocol, server='', port=0):
+    def __init__(self, protocol, server='', port=0, is_server=True):
         Thread.__init__(self)
         self.protocol = protocol
-        self.accept_socket = TinyDataSocket(is_readable=True, is_writeable=False)
-        self.accept_socket.listen(server, port)
+        self.server = server
+        self.port = port
+        self.socks = []
+        if is_server:
+            self.accept_socket = TinyDataSocket(is_readable=True, is_writeable=False)
+            self.accept_socket.listen(server, port)
+            self.socks.append(self.accept_socket)
+
+    def add_socket(self):
+        socket = TinyDataProtocolSocket(self.protocol())
+        socket.connect((self.server, self.port))
+        self.socks.append(socket)
+        return socket
 
     def select(self, sockets):
         socket_dict = {sock.get_socket(): sock for sock in sockets}
@@ -26,25 +37,24 @@ class ProtocolServer(Thread):
         return ready_for_read, ready_for_write
 
     def run(self):
-        socks = [self.accept_socket]
         while True:
-            ready_for_read, ready_for_write = self.select(socks)
+            ready_for_read, ready_for_write = self.select(self.socks)
             # we can read
             for ready in ready_for_read:
                 if ready == self.accept_socket:
                     sock, address = ready.accept()
-                    socks.append(TinyDataProtocolSocket(self.protocol(), sock))
+                    self.socks.append(TinyDataProtocolSocket(self.protocol(), sock))
                 else:
                     try:
                         if not ready.handle_read():
-                            socks.remove(ready)
+                            self.socks.remove(ready)
                     except socket.error, e:
                         ready.handle_close() # TODO for now...
-                        socks.remove(ready)
+                        self.socks.remove(ready)
             # we can write
             for ready in ready_for_write:
                 try:
                     ready.handle_write()
                 except socket.error, e:
                     ready.handle_close() # TODO for now...
-                    socks.remove(ready)
+                    self.socks.remove(ready)
