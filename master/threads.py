@@ -1,7 +1,6 @@
-from threading import Lock, Thread
+from threading import Lock
 import uuid
 
-from common.communication import TinyDataProtocol
 import common.locations as loc
 from common.threads import ProtocolThread
 from master.file_system import FileSystem
@@ -10,7 +9,7 @@ from master.file_system import FileSystem
 class MasterServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, self, 'localhost', loc.master_listen_port)
+        ProtocolThread.__init__(self, 'localhost', loc.master_listen_port)
         self.fs = FileSystem()
         self.commands = {
             'ls': self.handle_ls,
@@ -98,7 +97,7 @@ class MasterServer(ProtocolThread):
 class ChunkUploader(ProtocolThread):
 
     def __init__(self, sock, path, chunk):
-        ProtocolThread.__init__(self, self, is_server=False)
+        ProtocolThread.__init__(self, is_server=False)
         self.sock = sock
         self.path = path
         self.uuid = uuid.uuid4()
@@ -127,7 +126,7 @@ class ChunkUploader(ProtocolThread):
 class MapReduceDispatcher(ProtocolThread):
 
     def __init__(self, sock, path, results_path, map_fn, reduce_fn):
-        ProtocolThread.__init__(self, self, is_server=False)
+        ProtocolThread.__init__(self, is_server=False)
         self.sock = sock
         self.path = path
         self.results_path = results_path

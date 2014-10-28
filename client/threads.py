@@ -1,10 +1,8 @@
 
-from common.communication import TinyDataProtocol
 from common.threads import ProtocolThread
 
 
-class ClientThread(ProtocolThread, TinyDataProtocol):
+class ClientThread(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, self, is_server=False)
-        TinyDataProtocol.__init__(self)
+        ProtocolThread.__init__(self, is_server=False)

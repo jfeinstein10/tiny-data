@@ -1,10 +1,7 @@
 import os
-import marshal
-import types
 from threading import Thread
 
 import common.locations as loc
-from common.communication import TinyDataProtocol
 from common.threads import ProtocolThread
 from common.util import get_filepath, deserialize_module
 
@@ -12,7 +9,7 @@ from common.util import get_filepath, deserialize_module
 class FollowerServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, self, 'localhost', loc.follower_listen_port, is_server=True)
+        ProtocolThread.__init__(self, 'localhost', loc.follower_listen_port, is_server=True)
         self.commands = {
             'store_chunk': self.handle_store_chunk,
             'remove_chunks': self.handle_remove_chunks,
