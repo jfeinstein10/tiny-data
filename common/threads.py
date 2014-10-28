@@ -12,6 +12,7 @@ class ProtocolThread(Thread):
 
     def __init__(self, protocol, server='localhost', port=8000, is_server=True):
         Thread.__init__(self)
+        self.daemon = True
         self.protocol = protocol
         self.server = server
         self.port = port
@@ -24,7 +25,7 @@ class ProtocolThread(Thread):
     def add_socket(self, server=None, port=None):
         server = server or self.server
         port = port or self.port
-        sock = TinyDataProtocolSocket(self.protocol())
+        sock = TinyDataProtocolSocket(self.protocol)
         sock.connect((server, port))
         self.socks.append(sock)
         return sock
@@ -44,7 +45,7 @@ class ProtocolThread(Thread):
         for ready in ready_for_read:
             if ready == self.accept_socket:
                 sock, address = ready.accept()
-                self.socks.append(TinyDataProtocolSocket(self.protocol(), sock))
+                self.socks.append(TinyDataProtocolSocket(self.protocol, sock))
             else:
                 try:
                     if not ready.handle_read():

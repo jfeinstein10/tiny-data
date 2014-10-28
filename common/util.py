@@ -1,5 +1,8 @@
+import imp
 import os
 import re
+import tempfile
+
 
 TINYDATA_BASE = '.tinydata'
 SSL_CERT_LOCATION = '.ssl/my_cert.crt'
@@ -30,28 +33,13 @@ def get_filepath(filename):
     return os.path.join(get_tinydata_base(), filename)
 
 
-def validate_filename(filename):
-    match = VALID_FILENAME_RE.match(filename)
-    return match and match.string is filename
-
-
-def is_directory(filename):
-    return os.path.isdir(get_filepath(filename))
-
-
-def is_file(filename):
-    return os.path.isfile(get_filepath(filename))
-
-
-def mkdir(filename):
-    if not is_file(filename) and not is_directory(filename):
-        os.mkdir(get_filepath(filename))
-
-
-def ls(filename):
-    if is_file(filename):
-        return [filename]
-    elif is_directory(filename):
-        return [os.path.join(filename, name) for name in os.listdir(get_filepath(filename))]
-    else:
-        return []
+def load_map_reduce(contents):
+    path = os.path.dirname(taskfile)
+    taskmodulename = os.path.splitext(os.path.basename(taskfile))[0]
+    logging.info("Loading task file %s from %s", taskmodulename, path)
+    fp, pathname, description = imp.find_module(taskmodulename, [path])
+    try:
+        return imp.load_module(taskmodulename, fp, pathname, description)
+    finally:
+        if fp:
+            fp.close()

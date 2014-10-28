@@ -1,7 +1,7 @@
 import socket
 import ssl
 
-from common import path
+from common import util
 
 # SSL reference: http://carlo-hamalainen.net/blog/2013/1/24/python-ssl-socket-echo-test-with-self-signed-certificate
 
@@ -23,8 +23,8 @@ class TinyDataSocket(object):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket = sock
         if use_ssl:
-            self.socket = ssl.wrap_socket(sock, keyfile=path.get_ssl_key(), certfile=path.get_ssl_cert(),
-                                          cert_reqs=ssl.CERT_REQUIRED, ca_certs=path.get_ssl_cacerts(),
+            self.socket = ssl.wrap_socket(sock, keyfile=util.get_ssl_key(), certfile=util.get_ssl_cert(),
+                                          cert_reqs=ssl.CERT_REQUIRED, ca_certs=util.get_ssl_cacerts(),
                                           do_handshake_on_connect=True)
         self.socket.setblocking(0)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

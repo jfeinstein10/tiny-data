@@ -1,10 +1,5 @@
-from master.threads import ClientThread, FollowerThread
+from master.threads import MasterServer
 
-cThread = ClientThread()
-fThread = FollowerThread()
-
-cThread.start()
-fThread.start()
-
-cThread.join()
-fThread.join()
+mServer = MasterServer()
+mServer.start()
+mServer.join()

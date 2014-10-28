@@ -2,7 +2,7 @@ import cPickle
 from collections import defaultdict
 import os
 
-from common.path import get_filepath
+from common.util import get_filepath
 
 
 # a dict-based file system
