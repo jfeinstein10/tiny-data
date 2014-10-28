@@ -1,5 +1,11 @@
 from master.threads import MasterServer
 
-mServer = MasterServer()
-mServer.start()
-mServer.join()
+
+def main():
+    mServer = MasterServer()
+    mServer.start()
+    mServer.join()
+
+
+if __name__ == '__main__':
+    main()

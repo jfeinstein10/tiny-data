@@ -6,10 +6,10 @@ from threading import Thread
 import common.locations as loc
 from common.communication import TinyDataProtocol
 from common.threads import ProtocolThread
-from common.util import get_filepath
+from common.util import get_filepath, deserialize_module
 
 
-class FollowerServer(ProtocolThread, TinyDataProtocol):
+class FollowerServer(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, self, 'localhost', loc.follower_listen_port, is_server=True)
@@ -21,7 +21,7 @@ class FollowerServer(ProtocolThread, TinyDataProtocol):
         }
 
     def handle_store_chunk(self, sock, payload):
-        file_id = payload[0]
+        path = payload[0]
         chunk_id = payload[1]
         chunk = payload[2]
         path = get_filepath(chunk_id)
@@ -30,7 +30,7 @@ class FollowerServer(ProtocolThread, TinyDataProtocol):
             sock.queue_command(['store_chunk', 'success'])
 
     def handle_remove_chunks(self, sock, payload):
-        file_id = payload[0]
+        path = payload[0]
         chunk_ids = payload[1:]
         paths = [get_filepath(chunk_id) for chunk_id in chunk_ids]
         for path in paths:
@@ -38,18 +38,26 @@ class FollowerServer(ProtocolThread, TinyDataProtocol):
         sock.queue_command(['remove_chunks', 'success'])
 
     def handle_get_chunk(self, sock, payload):
-        file_id = payload[0]
+        path = payload[0]
         chunk_ids = payload[1:]
+        paths = [get_filepath(chunk_id) for chunk_id in chunk_ids]
+        for path in paths:
+            with open(path, 'r') as f:
+                line = f.readline()
 
     def handle_map_reduce(self, sock, payload):
-        file_id = payload[0]
-        map_fn = types.FunctionType(marshal.loads(payload[1]), globals(), "some_func_name")
-        reduce_fn = types.FunctionType(marshal.loads(payload[2]), globals(), "some_func_name")
-        chunk_ids = payload[3:]
+        path = payload[0]
+        module_contents = payload[1]
+        chunk_ids = payload[2:]
+
+        map_reduce_module = deserialize_module(module_contents)
+        map_fn = map_reduce_module.map_fn
+        data_split = map_reduce_module.data_split
+        reduce_fn = map_reduce_module.reduce_fn
 
         reducer = Reducer(reduce_fn, sock)
         reducer.start()
-        mapper = Mapper(map_fn, chunk_ids, reducer)
+        mapper = Mapper(map_fn, data_split, chunk_ids, reducer)
         mapper.start()
 
     def run(self):
@@ -59,10 +67,14 @@ class FollowerServer(ProtocolThread, TinyDataProtocol):
 
 class Mapper(Thread):
 
-    def __init__(self, map_fn, chunk_ids, reducer):
+    def __init__(self, map_fn, data_split, chunk_ids, reducer):
         self.map_fn = map_fn
+        self.data_split = data_split
         self.chunk_ids = chunk_ids
         self.reducer = reducer
+
+    def run(self):
+        pass
 
 
 class Reducer(Thread):
@@ -70,3 +82,6 @@ class Reducer(Thread):
     def __init__(self, reduce_fn, sock):
         self.reduce_fn = reduce_fn
         self.sock
+
+    def run(self):
+        pass

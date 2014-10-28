@@ -2,16 +2,17 @@ import select
 import socket
 from threading import Thread
 
-from common.communication import TinyDataSocket, TinyDataProtocolSocket
+from common.communication import TinyDataSocket, TinyDataProtocolSocket, TinyDataProtocol
 
 
 DEFAULT_TIMEOUT = 4
 
 
-class ProtocolThread(Thread):
+class ProtocolThread(Thread, TinyDataProtocol):
 
     def __init__(self, protocol, server='localhost', port=8000, is_server=True):
         Thread.__init__(self)
+        TinyDataProtocol.__init__(self)
         self.daemon = True
         self.protocol = protocol
         self.server = server

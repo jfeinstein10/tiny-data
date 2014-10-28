@@ -7,11 +7,10 @@ from common.threads import ProtocolThread
 from master.file_system import FileSystem
 
 
-class MasterServer(ProtocolThread, TinyDataProtocol):
+class MasterServer(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, self, 'localhost', loc.master_listen_port)
-        TinyDataProtocol.__init__(self)
         self.fs = FileSystem()
         self.commands = {
             'ls': self.handle_ls,
@@ -96,7 +95,7 @@ class MasterServer(ProtocolThread, TinyDataProtocol):
             MapReduceDispatcher(sock, path, path_results, map_fn, reduce_fn)
 
 
-class ChunkUploader(ProtocolThread, TinyDataProtocol):
+class ChunkUploader(ProtocolThread):
 
     def __init__(self, sock, path, chunk):
         ProtocolThread.__init__(self, self, is_server=False)
@@ -125,7 +124,7 @@ class ChunkUploader(ProtocolThread, TinyDataProtocol):
             self.select_iteration()
 
 
-class MapReduceDispatcher(ProtocolThread, TinyDataProtocol):
+class MapReduceDispatcher(ProtocolThread):
 
     def __init__(self, sock, path, results_path, map_fn, reduce_fn):
         ProtocolThread.__init__(self, self, is_server=False)
