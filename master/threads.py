@@ -85,13 +85,12 @@ class MasterServer(ProtocolThread):
     def handle_map_reduce(self, sock, payload):
         path = payload[0]
         path_results = payload[1]
-        map_fn = payload[2]
-        reduce_fn = payload[3]
+        job_contents = payload[2]
         file = self.validate_file('map_reduce', sock, path)
         results = self.validate_file('map_reduce', sock, path_results)
         if file and not results:
             self.fs.create_file(results)
-            MapReduceDispatcher(sock, path, path_results, map_fn, reduce_fn)
+            MapReduceDispatcher(sock, path, path_results, job_contents)
 
 
 class ChunkUploader(ProtocolThread):
@@ -125,14 +124,13 @@ class ChunkUploader(ProtocolThread):
 
 class MapReduceDispatcher(ProtocolThread):
 
-    def __init__(self, sock, path, results_path, map_fn, reduce_fn):
+    def __init__(self, sock, path, results_path, job_contents):
         ProtocolThread.__init__(self, is_server=False)
         self.sock = sock
         self.path = path
         self.results_path = results_path
-        self.map_fn = map_fn
-        self.reduce_fn = reduce_fn
+        self.job_contents = job_contents
 
     def run(self):
         sock = self.add_socket(loc.follower_ips[0], loc.follower_listen_port)
-        sock.queue_command(['map_reduce', self.map_fn, self.reduce_fn])
+        sock.queue_command(['map_reduce', self.path, self.job_contents, 0, 1, 2])

@@ -40,17 +40,18 @@ class FollowerServer(ProtocolThread):
         paths = [get_filepath(chunk_id) for chunk_id in chunk_ids]
         for path in paths:
             with open(path, 'r') as f:
-                line = f.readline()
+                for line in f:
+                    pass
 
     def handle_map_reduce(self, sock, payload):
         path = payload[0]
-        module_contents = payload[1]
+        job_contents = payload[1]
         chunk_ids = payload[2:]
 
-        map_reduce_module = deserialize_module(module_contents)
-        map_fn = map_reduce_module.map_fn
-        data_split = map_reduce_module.data_split
-        reduce_fn = map_reduce_module.reduce_fn
+        job = deserialize_module(job_contents)
+        map_fn = job.map_fn
+        data_split = job.data_split
+        reduce_fn = job.reduce_fn
 
         reducer = Reducer(reduce_fn, sock)
         reducer.start()
