@@ -26,7 +26,7 @@ class TinyDataSocket(object):
             self.socket = ssl.wrap_socket(sock, keyfile=util.get_ssl_key(), certfile=util.get_ssl_cert(),
                                           cert_reqs=ssl.CERT_REQUIRED, ca_certs=util.get_ssl_cacerts(),
                                           do_handshake_on_connect=True)
-        self.socket.setblocking(0)
+        # self.socket.setblocking(0)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
     # Pass through methods

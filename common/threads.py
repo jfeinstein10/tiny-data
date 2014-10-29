@@ -21,6 +21,8 @@ class ProtocolThread(Thread, TinyDataProtocol):
             self.accept_socket = TinyDataSocket(is_readable=True, is_writeable=False)
             self.accept_socket.listen(server, port)
             self.socks.append(self.accept_socket)
+        else:
+            self.accept_socket = None
 
     def add_socket(self, server=None, port=None):
         server = server or self.server
@@ -43,7 +45,7 @@ class ProtocolThread(Thread, TinyDataProtocol):
         ready_for_read, ready_for_write = self.select()
         # we can read
         for ready in ready_for_read:
-            if ready == self.accept_socket:
+            if self.accept_socket and ready == self.accept_socket:
                 sock, address = ready.accept()
                 self.socks.append(TinyDataProtocolSocket(self, sock))
             else:
@@ -63,5 +65,5 @@ class ProtocolThread(Thread, TinyDataProtocol):
 
 
     def run(self):
-        while True:
+        while len(self.socks) > 0:
             self.select_iteration()

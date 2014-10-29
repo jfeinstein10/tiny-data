@@ -9,7 +9,7 @@ from master.file_system import FileSystem
 class MasterServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, 'localhost', loc.master_listen_port)
+        ProtocolThread.__init__(self, 'localhost', loc.master_listen_port, is_server=True)
         self.fs = FileSystem()
         self.commands = {
             'ls': self.handle_ls,
@@ -107,15 +107,17 @@ class ChunkUploader(ProtocolThread):
             'store_chunk': self.handle_store_chunk
         }
 
-    def handle_store_chunk(self):
+    def handle_store_chunk(self, sock, payload):
         with self.complete_lock:
             self.complete = True
         self.sock.queue_command(['upload_chunk', self.path + ' chunk stored successfully'])
+        sock.handle_close()
+        self.socks.remove(sock)
 
     def run(self):
         sock = self.add_socket(loc.follower_ips[0], loc.follower_listen_port)
         sock.queue_command(['store_chunk', self.path, self.uuid, self.chunk])
-        while True:
+        while len(self.socks) > 0:
             with self.complete_lock:
                 if self.complete:
                     break
@@ -134,3 +136,5 @@ class MapReduceDispatcher(ProtocolThread):
     def run(self):
         sock = self.add_socket(loc.follower_ips[0], loc.follower_listen_port)
         sock.queue_command(['map_reduce', self.path, self.job_contents, 0, 1, 2])
+        while len(self.socks) > 0:
+            self.select_iteration()

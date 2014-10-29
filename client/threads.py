@@ -10,7 +10,20 @@ class ClientThread(ProtocolThread):
     def __init__(self):
         ProtocolThread.__init__(self, is_server=False)
         self.sock = self.add_socket(loc.master_ip, loc.master_listen_port)
-        self.commands = {}
+        self.complete = False
+        self.commands = {
+            'ls': self.handle_result,
+            'rm': self.handle_result,
+            'mkdir': self.handle_result,
+            'cat': self.handle_result,
+            'upload_chunk': self.handle_result,
+            'map_reduce': self.handle_result,
+        }
+
+    def handle_result(self, sock, payload):
+        print payload[0]
+        sock.handle_close()
+        self.socks.remove(sock)
 
     def send_simple(self, command, path):
         self.sock.queue_command([command, path])

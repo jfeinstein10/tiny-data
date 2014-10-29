@@ -26,8 +26,11 @@ class FileSystem(object):
     def _get_file(self, path):
         steps = path.split('/')[1:]
         pwd = self.dict
+        # TODO root is hardcoded
+        if len(steps) == 1 and not steps[0]:
+            return pwd
         for step in steps:
-            if self._is_directory(pwd):
+            if self._is_directory(pwd) and step in pwd['children']:
                 pwd = pwd['children'][step]
             else:
                 return None
