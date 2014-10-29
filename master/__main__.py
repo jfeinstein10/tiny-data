@@ -2,9 +2,9 @@ from master.threads import MasterServer
 
 
 def main():
-    mServer = MasterServer()
-    mServer.start()
-    mServer.join()
+    m_server = MasterServer()
+    m_server.start()
+    m_server.join()
 
 
 if __name__ == '__main__':

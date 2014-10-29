@@ -19,15 +19,14 @@ class ClientThread(ProtocolThread):
         job_contents = serialize_module(job_path)
         self.sock.queue_command(['map_reduce', path, results_path, job_contents])
 
-    def send_upload(self, path, local_path, split_on, split_freq):
+    def send_upload(self, path, local_path, lines_per_chunk):
         with open(local_path, 'r') as local_file:
             buff = ''
             count = 0
             for line in local_file:
                 buff += line
                 count += 1
-                if count % split_freq == 0:
-                    buff = zlib.compress(buff)
-                    self.sock.queue_command(['upload_chunk', path, buff])
+                if count % lines_per_chunk == 0:
+                    self.sock.queue_command(['upload_chunk', path, zlib.compress(buff)])
                     buff = ''
                     count = 0

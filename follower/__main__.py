@@ -8,9 +8,9 @@ def main():
     base = get_tinydata_base()
     if not os.path.exists(base):
         os.mkdir(base)
-    fServer = FollowerServer()
-    fServer.start()
-    fServer.join()
+    f_server = FollowerServer()
+    f_server.start()
+    f_server.join()
 
 
 if __name__ == '__main__':

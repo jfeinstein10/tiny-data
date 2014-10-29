@@ -50,12 +50,11 @@ class FollowerServer(ProtocolThread):
 
         job = deserialize_module(job_contents)
         map_fn = job.map_fn
-        data_split = job.data_split
         reduce_fn = job.reduce_fn
 
         reducer = Reducer(reduce_fn, sock)
         reducer.start()
-        mapper = Mapper(map_fn, data_split, chunk_ids, reducer)
+        mapper = Mapper(map_fn, chunk_ids, reducer)
         mapper.start()
 
     def run(self):
@@ -65,9 +64,8 @@ class FollowerServer(ProtocolThread):
 
 class Mapper(Thread):
 
-    def __init__(self, map_fn, data_split, chunk_ids, reducer):
+    def __init__(self, map_fn, chunk_ids, reducer):
         self.map_fn = map_fn
-        self.data_split = data_split
         self.chunk_ids = chunk_ids
         self.reducer = reducer
 
@@ -79,7 +77,7 @@ class Reducer(Thread):
 
     def __init__(self, reduce_fn, sock):
         self.reduce_fn = reduce_fn
-        self.sock
+        self.sock = sock
 
     def run(self):
         pass
