@@ -1,5 +1,7 @@
+from collections import defaultdict
 import os
-from threading import Thread
+import cPickle as pickle
+from threading import Thread, Lock
 
 import common.locations as loc
 from common.threads import ProtocolThread
@@ -52,10 +54,10 @@ class FollowerServer(ProtocolThread):
         map_fn = job.map_fn
         reduce_fn = job.reduce_fn
 
-        reducer = Reducer(reduce_fn, sock)
-        reducer.start()
-        mapper = Mapper(map_fn, chunk_ids, reducer)
-        mapper.start()
+        reducer = Reducer(reduce_fn, len(chunk_ids), sock)
+        for chunk_id in chunk_ids:
+            mapper = Mapper(map_fn, chunk_id, reducer)
+            mapper.start()
 
     def run(self):
         while True:
@@ -64,20 +66,42 @@ class FollowerServer(ProtocolThread):
 
 class Mapper(Thread):
 
-    def __init__(self, map_fn, chunk_ids, reducer):
+    def __init__(self, map_fn, chunk_id, reducer):
         self.map_fn = map_fn
-        self.chunk_ids = chunk_ids
+        self.chunk_id = chunk_id
         self.reducer = reducer
 
     def run(self):
-        pass
+        results = defaultdict([])
+        with open(get_filepath(self.chunk_id), 'r') as data:
+            for line in data:
+                pairs = self.map_fn(line)
+                for key, value in pairs:
+                    results[key].append(value)
+        self.reducer.handle_mapping_results(results)
 
 
 class Reducer(Thread):
 
-    def __init__(self, reduce_fn, sock):
+    def __init__(self, reduce_fn, num_mappers, sock):
         self.reduce_fn = reduce_fn
+        self.num_mappers = num_mappers
+        self.num_results = 0
+        self.lock = Lock()
         self.sock = sock
+        self.results = defaultdict([])
+
+    def handle_mapping_results(self, results):
+        with self.lock:
+            for key, values in results.iteritems():
+                self.results[key] += values
+            self.num_results += 1
+            if self.num_results == self.num_mappers:
+                self.start()
 
     def run(self):
-        pass
+        final_results = {}
+        for key, values in self.results.iteritems():
+            result = self.reduce_fn(key, values)
+            final_results[key] = result
+        self.sock.queue_command(['map_reduce', pickle.dumps(final_results)])
