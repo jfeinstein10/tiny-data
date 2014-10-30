@@ -63,7 +63,6 @@ class ProtocolThread(Thread, TinyDataProtocol):
                 ready.handle_close()  # TODO for now...
                 self.socks.remove(ready)
 
-
     def run(self):
         while len(self.socks) > 0:
             self.select_iteration()

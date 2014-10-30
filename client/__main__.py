@@ -26,7 +26,7 @@ map_reduce_parser.add_argument('job_path', help='A python map reduce job file, w
 upload_parser = subparsers.add_parser('upload')
 upload_parser.add_argument('path', help='Store the data in the DFS at this path')
 upload_parser.add_argument('local_path', help='Upload the file at this path')
-upload_parser.add_argument('lines_per_chunk', help='The number of lines to include in each chunk')
+upload_parser.add_argument('lines_per_chunk', type=int, help='The number of lines to include in each chunk')
 
 def main():
     args = parser.parse_args()
@@ -34,9 +34,9 @@ def main():
     c_thread = ClientThread()
     if args.command in ['ls', 'rm', 'mkdir', 'cat']:
         c_thread.send_simple(args.command, args.path)
-    elif args.command is 'map_reduce':
+    elif args.command == 'map_reduce':
         c_thread.send_map_reduce(args.path, args.results_path, args.job_path)
-    elif args.command is 'upload':
+    elif args.command == 'upload':
         c_thread.send_upload(args.path, args.local_path, args.lines_per_chunk)
     c_thread.start()
     c_thread.join()

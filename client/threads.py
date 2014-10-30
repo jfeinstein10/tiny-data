@@ -40,6 +40,8 @@ class ClientThread(ProtocolThread):
                 buff += line
                 count += 1
                 if count % lines_per_chunk == 0:
-                    self.sock.queue_command(['upload_chunk', path, zlib.compress(buff)])
+                    self.sock.queue_command(['upload_chunk', path, buff])
                     buff = ''
                     count = 0
+            if buff:
+                self.sock.queue_command(['upload_chunk', path, buff])

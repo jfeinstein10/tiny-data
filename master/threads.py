@@ -78,19 +78,25 @@ class MasterServer(ProtocolThread):
     def handle_upload_chunk(self, sock, payload):
         path = payload[0]
         chunk = payload[1]
-        file = self.validate_file('upload_chunk', sock, path)
-        if file:
-            ChunkUploader(sock, path, chunk).run()
+        success = self.fs.create_file(path)
+        if success:
+            uploader = ChunkUploader(sock, path, chunk)
+            uploader.start()
+            uploader.join()
+        else:
+            sock.queue_command(['upload_chunk', 'unsuccessful'])
 
     def handle_map_reduce(self, sock, payload):
         path = payload[0]
         path_results = payload[1]
         job_contents = payload[2]
         file = self.validate_file('map_reduce', sock, path)
-        results = self.validate_file('map_reduce', sock, path_results)
-        if file and not results:
-            self.fs.create_file(results)
-            MapReduceDispatcher(sock, path, path_results, job_contents)
+        successful = self.fs.create_file(path_results)
+        if file and successful:
+            mr_dispatcher = MapReduceDispatcher(sock, path, path_results, job_contents)
+            mr_dispatcher.start()
+        else:
+            sock.queue_command(['map_reduce', 'unsuccessful'])
 
 
 class ChunkUploader(ProtocolThread):
