@@ -70,6 +70,12 @@ class FileSystem(object):
             return dir['children'].keys()
         return []
 
+    def get_file_chunks(self, path):
+        file = self._get_file(path)
+        if self._is_file(file):
+            return file['chunks']
+        return []
+
     def create_file(self, path):
         valid = self._verify_path(path)
         if not valid:
@@ -104,10 +110,10 @@ class FileSystem(object):
                 return True
         return False
 
-    def add_chunk_to_file(self, path, uuid, locations):
+    def add_chunk_to_file(self, path, chunk_id, locations):
         file = self._get_file(path)
         if self._is_file(file):
-            file['chunks'][uuid] = locations
+            file['chunks'][chunk_id] = locations
             return True
         return False
 
@@ -115,9 +121,10 @@ class FileSystem(object):
         parent = self._get_parent(path)
         if self._is_directory(parent):
             filename = self._get_filename(path)
+            child = parent['children'][filename]
             del parent['children'][filename]
-            return True
-        return False
+            return child
+        return None
 
 
 # A file based alternative (harder to synchronize)

@@ -17,13 +17,13 @@ class ClientThread(ProtocolThread):
             'mkdir': self.handle_result,
             'cat': self.handle_result,
             'upload_chunk': self.handle_result,
+            'remove_chunk': self.handle_result,
             'map_reduce': self.handle_result,
         }
 
     def handle_result(self, sock, payload):
         print payload[0]
-        sock.handle_close()
-        self.socks.remove(sock)
+        self.remove_socket(sock)
 
     def send_simple(self, command, path):
         self.sock.queue_command([command, path])
@@ -33,6 +33,7 @@ class ClientThread(ProtocolThread):
         self.sock.queue_command(['map_reduce', path, results_path, job_contents])
 
     def send_upload(self, path, local_path, lines_per_chunk):
+        print path, local_path, lines_per_chunk
         with open(local_path, 'r') as local_file:
             buff = ''
             count = 0

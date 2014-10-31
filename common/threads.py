@@ -32,6 +32,11 @@ class ProtocolThread(Thread, TinyDataProtocol):
         self.socks.append(sock)
         return sock
 
+    def remove_socket(self, sock, should_close=True):
+        self.socks.remove(sock)
+        if should_close:
+            sock.handle_close()
+
     def select(self):
         socket_dict = {sock.get_socket(): sock for sock in self.socks}
         read_socks = [sock for sock, tdsock in socket_dict.iteritems() if tdsock.readable()]
@@ -53,15 +58,13 @@ class ProtocolThread(Thread, TinyDataProtocol):
                     if not ready.handle_read():
                         self.socks.remove(ready)
                 except socket.error, e:
-                    ready.handle_close()  # TODO for now...
-                    self.socks.remove(ready)
+                    self.remove_socket(ready)
         # we can write
         for ready in ready_for_write:
             try:
                 ready.handle_write()
             except socket.error, e:
-                ready.handle_close()  # TODO for now...
-                self.socks.remove(ready)
+                self.remove_socket(ready)
 
     def run(self):
         while len(self.socks) > 0:

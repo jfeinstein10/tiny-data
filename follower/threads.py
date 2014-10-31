@@ -11,10 +11,10 @@ from common.util import get_filepath, deserialize_module
 class FollowerServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, 'localhost', loc.follower_listen_port, is_server=True)
+        ProtocolThread.__init__(self, loc.follower_ips[0], loc.follower_listen_port, is_server=True)
         self.commands = {
             'store_chunk': self.handle_store_chunk,
-            'remove_chunks': self.handle_remove_chunks,
+            'remove_chunk': self.handle_remove_chunk,
             'get_chunk': self.handle_get_chunk,
             'map_reduce': self.handle_map_reduce,
         }
@@ -28,13 +28,12 @@ class FollowerServer(ProtocolThread):
             f.write(chunk)
             sock.queue_command(['store_chunk', 'success'])
 
-    def handle_remove_chunks(self, sock, payload):
+    def handle_remove_chunk(self, sock, payload):
         path = payload[0]
-        chunk_ids = payload[1:]
-        paths = [get_filepath(chunk_id) for chunk_id in chunk_ids]
-        for path in paths:
-            os.remove(path)
-        sock.queue_command(['remove_chunks', 'success'])
+        chunk_id = payload[1]
+        chunk_path = get_filepath(chunk_id)
+        os.remove(chunk_path)
+        sock.queue_command(['remove_chunk', 'success'])
 
     def handle_get_chunk(self, sock, payload):
         path = payload[0]

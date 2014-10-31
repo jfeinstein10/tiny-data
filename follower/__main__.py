@@ -10,7 +10,7 @@ def main():
         os.mkdir(base)
     f_server = FollowerServer()
     f_server.start()
-    f_server.join()
+    return f_server
 
 
 if __name__ == '__main__':
