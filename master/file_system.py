@@ -3,6 +3,8 @@ from collections import defaultdict
 import os
 
 from common.util import get_filepath
+from master.chunk import *
+
 
 
 # a dict-based file system
@@ -15,10 +17,12 @@ class FileSystem(object):
             cls._instance = super(FileSystem, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, master_server):
+        self.REPLICA_TIMES = 2
         self.dict = self._new_dict()
         self.dict['is_directory'] = True
         self.dict['children'] = self._new_dict()
+        self.master_server = master_server
 
     def _new_dict(self):
         return defaultdict(lambda: None)
@@ -88,7 +92,7 @@ class FileSystem(object):
             else:
                 file = self._new_dict()
                 file['is_file'] = True
-                file['chunks'] = self._new_dict()
+                file['chunks'] = []
                 parent['children'][filename] = file
                 return True
         return False
@@ -110,10 +114,11 @@ class FileSystem(object):
                 return True
         return False
 
-    def add_chunk_to_file(self, path, chunk_id, locations):
+    def add_chunk_to_file(self, path, chunk_id, followers):
         file = self._get_file(path)
         if self._is_file(file):
-            file['chunks'][chunk_id] = locations
+            new_chunk = Chunk(chunk_id, followers)
+            file['chunks'].append(new_chunk)
             return True
         return False
 
@@ -125,6 +130,17 @@ class FileSystem(object):
             del parent['children'][filename]
             return child
         return None
+
+    def compare_follower_storage(f1, f2):
+        if f1.bytes_stored < f2.bytes_stored:  return -1
+        if f2.bytes_stored > f2.bytes_stored:  return 1
+        return 0
+
+    def get_followers_least_filled(num_followers):
+        sorted_list = sorted(self.master_server.followers.values(), compare_follower_storage)
+        return_num = min(num_followers, len(sorted_list))
+        return sorted_list[:return_num]
+
 
 
 # A file based alternative (harder to synchronize)
@@ -176,7 +192,7 @@ class File(Node):
         Node.__init__(self, path)
         self.split_character = split_character
         self.split_frequency = split_frequency
-        self.chunks = {}
+        self.chunks = []
 
 
 class Directory(Node):

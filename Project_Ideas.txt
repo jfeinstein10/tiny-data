@@ -1,0 +1,29 @@
+(1) Distribute copies of data on multiple machines
+(2) Have one worker fail -- make sure it still works
+(3) Coordinate which tasks are completed and which still need to be executed on different workers -- synchronoziation needed -- honeypot like coming in
+
+
+
+MAP_REQUEST Server
+	- Determine which node has data and is free
+	- Send map request to node
+	- Get response from node
+	- Send reduce request to node
+	- Get response from node
+	- Tell client when done
+
+
+
+MAP
+	- INPUT:  chunk, maptask
+	- Count words in chunk - Intermediate calculations done in dictionary
+	- Output key/value list to system -- output counts to system
+	- System writes key/value list to a separate file for each map
+	- OUTPUT:  System send done notification to master with chunk ID, also sends count updates
+REDUCE
+	- INPUT:  Chunk IDs to combine, reducetask
+	- Combine all counts in queue in its own dictionary
+	- Output key/value list to system -- output counts to system
+	- System write results to file
+	- OUTPUT:  System send done notification to master with chunk ID, also sends count updates
+	- MASTER:  System erases map files

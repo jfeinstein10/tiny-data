@@ -1,0 +1,53 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{81cb8669-8c83-4a73-8b12-7c746a197d22}</ProjectGuid>
+    <ProjectHome />
+    <StartupFile />
+    <SearchPath />
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>.</OutputPath>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'" />
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'" />
+  <ItemGroup>
+    <Content Include="Project_Ideas.txt" />
+    <Content Include="requirements.txt" />
+    <Compile Include="brian_test\test_compile.py" />
+    <Compile Include="brian_test\__init__.py" />
+    <Compile Include="client\threads.py" />
+    <Compile Include="client\__init__.py" />
+    <Compile Include="client\__main__.py" />
+    <Compile Include="common\communication.py" />
+    <Compile Include="common\locations.py" />
+    <Compile Include="common\threads.py" />
+    <Compile Include="common\util.py" />
+    <Compile Include="common\__init__.py" />
+    <Compile Include="examples\word_count.py" />
+    <Compile Include="follower\threads.py" />
+    <Compile Include="follower\__init__.py" />
+    <Compile Include="follower\__main__.py" />
+    <Compile Include="master\chunk.py" />
+    <Compile Include="master\class1.py" />
+    <Compile Include="master\follower.py" />
+    <Compile Include="master\file_system.py" />
+    <Compile Include="master\threads.py" />
+    <Compile Include="master\__init__.py" />
+    <Compile Include="master\__main__.py" />
+    <Compile Include="test\test_server.py" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="brian_test" />
+    <Folder Include="client" />
+    <Folder Include="common" />
+    <Folder Include="examples" />
+    <Folder Include="follower" />
+    <Folder Include="master" />
+    <Folder Include="test" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" />
+</Project>

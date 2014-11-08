@@ -1,6 +1,6 @@
 import select
 import socket
-from threading import Thread
+from threading import Thread, Lock
 
 from common.communication import TinyDataSocket, TinyDataProtocolSocket, TinyDataProtocol
 
@@ -17,10 +17,11 @@ class ProtocolThread(Thread, TinyDataProtocol):
         self.server = server
         self.port = port
         self.socks = []
+        self.socks_lock = Lock()
         if is_server:
             self.accept_socket = TinyDataSocket(is_readable=True, is_writeable=False)
             self.accept_socket.listen(server, port)
-            self.socks.append(self.accept_socket)
+            self.socks_append(self.accept_socket)
         else:
             self.accept_socket = None
 
@@ -29,7 +30,7 @@ class ProtocolThread(Thread, TinyDataProtocol):
         port = port or self.port
         sock = TinyDataProtocolSocket(self)
         sock.connect((server, port))
-        self.socks.append(sock)
+        self.socks_append(sock)
         return sock
 
     def remove_socket(self, sock, should_close=True):
@@ -52,7 +53,7 @@ class ProtocolThread(Thread, TinyDataProtocol):
         for ready in ready_for_read:
             if self.accept_socket and ready == self.accept_socket:
                 sock, address = ready.accept()
-                self.socks.append(TinyDataProtocolSocket(self, sock))
+                self.socks_append(TinyDataProtocolSocket(self, sock))
             else:
                 try:
                     if not ready.handle_read():
@@ -65,6 +66,10 @@ class ProtocolThread(Thread, TinyDataProtocol):
                 ready.handle_write()
             except socket.error, e:
                 self.remove_socket(ready)
+
+    def socks_append(sock):
+        with self.socks_lock:
+            self.socks.append(sock)
 
     def run(self):
         while len(self.socks) > 0:

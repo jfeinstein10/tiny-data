@@ -1,3 +1,4 @@
+import sys
 from collections import defaultdict
 import os
 import cPickle as pickle
@@ -8,16 +9,62 @@ from common.threads import ProtocolThread
 from common.util import get_filepath, deserialize_module
 
 
+
+# Globals
+map_fn = None
+combine_fn = None
+reduce_fn = None
+
+chunk_ids_assigned = []
+chunk_id_last_assigned = 0
+
+
+
+class TrueFalse:
+    FALSE = 0
+    TRUE = 1
+    
+    def str_to_bool(s):
+        if s=='0': return False
+        else: return True
+        
+        
+        
+class ReturnStatus:
+    FAIL = 0
+    SUCCESS = 1
+
+
+
 class FollowerServer(ProtocolThread):
 
-    def __init__(self):
-        ProtocolThread.__init__(self, loc.follower_ips[0], loc.follower_listen_port, is_server=True)
+    def __init__(self, this_ip_addr, master_ip_addr):
+        ProtocolThread.__init__(self, this_ip_addr, loc.follower_port, is_server=False)
+        # Connect to master
+        self.master_sock = self.add_socket((master_ip_addr, loc.master_follower_port))
+        
+        self.this_ip_addr = this_ip_addr
+
         self.commands = {
             'store_chunk': self.handle_store_chunk,
             'remove_chunk': self.handle_remove_chunk,
             'get_chunk': self.handle_get_chunk,
-            'map_reduce': self.handle_map_reduce,
+            'map': self.handle_map,
+            'reduce':  self.handle_reduce
         }
+
+    @staticmethod
+    def get_next_free_chunk():
+        all_tried = False
+        cur_chunk_num = chunk_id_last_assigned
+        while(cur_chunk_num and not all_tried):
+            if (cur_chunk_num==(-sys.maxint-1)): cur_chunk_num = -1
+            else: cur_chunk_num += 1
+            if (cur_chunk_num==chunk_id_last_assigned):  all_tried = True
+            elif cur_chunk_num not in chunk_ids_assigned:
+                chunk_id_last_assigned = cur_chunk_num
+                chunk_ids_assigned.append(cur_chunk_num)
+                return cur_chunk_num
 
     def handle_store_chunk(self, sock, payload):
         path = payload[0]
@@ -44,63 +91,109 @@ class FollowerServer(ProtocolThread):
                 for line in f:
                     pass
 
-    def handle_map_reduce(self, sock, payload):
+    def handle_map(self, sock, payload):
+        # Get map payload info
         path = payload[0]
-        job_contents = payload[1]
-        chunk_ids = payload[2:]
-
-        job = deserialize_module(job_contents)
-        map_fn = job.map_fn
-        reduce_fn = job.reduce_fn
-
-        reducer = Reducer(reduce_fn, len(chunk_ids), sock)
-        for chunk_id in chunk_ids:
-            mapper = Mapper(map_fn, chunk_id, reducer)
-            mapper.start()
+        chunk_id = payload[1]
+        
+        # Get map module if necessary
+        if (payload[2]!='0'):
+            map_mod = deserialize_module(payload[2])
+            map_fn = map_mod.map_fn
+        # Get map module if necessary
+        if (payload[3]!='0'):
+            combine_mod = deserialize_module(payload[3])
+            combine_fn = combine_mod.combine_fn
+            
+        mapper = Mapper(self, self.master_sock, chunk_id)
+        mapper.start()
+            
+    def handle_reduce(self, sock, payload):
+        # Get reduce payload info
+        path = payload[0]
+        result_chunk_id = payload[2]
+        map_chunk_ids = payload[3:]
+        
+        # Get reduce module if necessary
+        if (payload[1]!='0'):
+            reduce_mod = deserialize_module(payload[1])
+            reduce_fn = reduce_mod.reduce_fn
+            
+        reducer = Reducer(self, sock, result_chunk_id, map_chunk_ids)
+        reducer.start()
 
     def run(self):
         while True:
             self.select_iteration()
 
 
+
 class Mapper(Thread):
 
-    def __init__(self, map_fn, chunk_id, reducer):
-        self.map_fn = map_fn
+    def __init__(self, follower, master_sock, chunk_id):
         self.chunk_id = chunk_id
-        self.reducer = reducer
+        self.master_sock = master_sock
+        self.follower = follower
 
     def run(self):
-        results = defaultdict([])
-        with open(get_filepath(self.chunk_id), 'r') as data:
-            for line in data:
-                pairs = self.map_fn(line)
-                for key, value in pairs:
-                    results[key].append(value)
-        self.reducer.handle_mapping_results(results)
+        if (map_fn):
+            # Perform map and collect results in dictionary
+            result_dict = defaultdict([])
+            with open(get_filepath(self.chunk_id), 'r') as data:
+                for line in data:
+                    pairs, counts = self.map_fn(line)
+                    for key, value in pairs:
+                        result_dict[key].append(value)
+            # Put results into list
+            # Use combine function if supplied
+            result_list = []
+            if (combine_fn):
+                for key in result_dict:
+                    result_list.append((key, combine_fn(result_dict[key])))
+            else:
+                for key in result_dict:
+                    for val in result_dict[key]:
+                        result_list.append((key, val))
+            # Pickle results into written file
+            results_chunk_id = FollowerServer.get_next_free_chunk()
+            with open(get_filepath(results_chunk_id),'w') as f:
+                pickle.dump(result_list, f)
+            # Send updates to master
+            command = ['map_response', self.follower.this_ip_addr, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
+            for count in counts:
+                command.append(str(count))
+            self.master_sock.queue_command(command)
+                
 
 
 class Reducer(Thread):
 
-    def __init__(self, reduce_fn, num_mappers, sock):
-        self.reduce_fn = reduce_fn
-        self.num_mappers = num_mappers
-        self.num_results = 0
-        self.lock = Lock()
-        self.sock = sock
-        self.results = defaultdict([])
-
-    def handle_mapping_results(self, results):
-        with self.lock:
-            for key, values in results.iteritems():
-                self.results[key] += values
-            self.num_results += 1
-            if self.num_results == self.num_mappers:
-                self.start()
+    def __init__(self, follower, master_sock, result_chunk_id, map_chunk_ids):
+        self.master_sock = master_sock
+        self.result_chunk_id = result_chunk_id
+        self.map_chunk_ids = map_chunk_ids
+        self.follower = follower
 
     def run(self):
-        final_results = {}
-        for key, values in self.results.iteritems():
-            result = self.reduce_fn(key, values)
-            final_results[key] = result
-        self.sock.queue_command(['map_reduce', pickle.dumps(final_results)])
+        if (reduce_fn):
+            # Collect key,values from map files into list
+            keyvals = []
+            for chunk_id in self.map_chunk_ids:
+                map_results = []
+                with open(get_filepath(chunk_id),'r') as f:
+                    map_results = pickle.load(f)
+                for pair in map_results:
+                    keyvals.append(pair)
+            # Perform reduce
+            final_keyvals = {}
+            pairs, counts = reduce_fn(keyvals)
+            for key, val in pairs:
+                final_keyvals[key] = val
+            # Write pickeled results to file
+            with open(get_filepath(self.result_chunk_id),'w') as f:
+                pickle.dump(final_keyvals, f)
+            # Send updates to master
+            command = ['reduce_response', self.follower.this_ip_addr, str(ReturnStatus.SUCCESS)]
+            for count in counts:
+                command.append(str(count))
+            self.master_sock.queue_command(command)
