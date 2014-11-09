@@ -59,3 +59,7 @@ def deserialize_module(module_contents):
         os.remove(module_path)
         return module
 
+
+class ReturnStatus(object):
+    FAIL = 0
+    SUCCESS = 1

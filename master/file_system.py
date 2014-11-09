@@ -131,13 +131,15 @@ class FileSystem(object):
             return child
         return None
 
-    def compare_follower_storage(f1, f2):
-        if f1.bytes_stored < f2.bytes_stored:  return -1
-        if f2.bytes_stored > f2.bytes_stored:  return 1
+    def compare_follower_storage(self, f1, f2):
+        if f1.bytes_stored < f2.bytes_stored:
+            return -1
+        if f2.bytes_stored > f2.bytes_stored:
+            return 1
         return 0
 
-    def get_followers_least_filled(num_followers):
-        sorted_list = sorted(self.master_server.followers.values(), compare_follower_storage)
+    def get_followers_least_filled(self, num_followers):
+        sorted_list = sorted(self.master_server.followers.values(), self.compare_follower_storage)
         return_num = min(num_followers, len(sorted_list))
         return sorted_list[:return_num]
 
