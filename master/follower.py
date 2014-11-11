@@ -13,8 +13,7 @@ class FollowerState(object):
 
 class Follower(object):
     
-    def __init__(self, sock, ip_addr):
-        self.sock = sock
+    def __init__(self, ip_addr):
         self.ip_addr = ip_addr
         self.state = FollowerState.ACTIVE
         self.bytes_stored = 0
