@@ -1,10 +1,12 @@
-from master.threads import MasterServer
+from master.threads import MasterServer, FollowerAcceptor
 
 
 def main():
-    m_server = MasterServer()
-    m_server.start()
-    return m_server
+    follower_acceptor = FollowerAcceptor()
+    follower_acceptor.start()
+    master_server = MasterServer()
+    master_server.start()
+    return [master_server, follower_acceptor]
 
 
 if __name__ == '__main__':

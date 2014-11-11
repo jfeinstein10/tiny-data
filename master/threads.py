@@ -6,21 +6,19 @@ from common.communication import TinyDataProtocolSocket
 from common.threads import ProtocolThread
 from common.util import ReturnStatus
 from master.chunk import Chunk
-from master.file_system import FileSystem
+from master.file_system import FileSystem, REPLICA_TIMES
 from master.follower import *
-import Queue
+from Queue import Queue
+
+
+followers = {}
+fs = FileSystem()
 
 
 class MasterServer(ProtocolThread):
 
-    def __init__(self, this_ip_addr):
-        ProtocolThread.__init__(self, this_ip_addr, loc.master_client_port, is_server=True)
-        self.this_ip_addr = this_ip_addr
-        self.followers = {}
-        self.clients = {}
-        self.fs = FileSystem(self)
-        self.follower_acceptor = FollowerAcceptor(self)
-        self.follower_acceptor.start()
+    def __init__(self):
+        ProtocolThread.__init__(self, 'localhost', loc.master_client_port, is_server=True)
         self.assign_task_sema = None
         self.mr_dispatcher = None
         self.sock_with_map_request = None
@@ -30,22 +28,22 @@ class MasterServer(ProtocolThread):
             'mkdir': self.handle_mkdir,
             'cat': self.handle_cat,
             'upload_chunk': self.handle_upload_chunk,
-            'map_reduce': self.handle_map_reduce,
-            'map_response':  self.handle_map,
-            'reduce_response':  self.handle_reduce
+            'map_reduce': self.handle_map_reduce_upload,
+            'map_response':  self.handle_map_response,
+            'reduce_response':  self.handle_reduce_response
         }
 
     def validate_exists(self, command, sock, path):
-        if self.fs.exists(path):
-            return self.fs._get_file(path)
+        if fs.exists(path):
+            return fs._get_file(path)
         else:
             sock.queue_command([command, path + ' does not exist'])
             return None
 
     def validate_directory(self, command, sock, path):
-        if self.fs.is_directory(path):
-            return self.fs._get_file(path)
-        elif self.fs.is_file(path):
+        if fs.is_directory(path):
+            return fs._get_file(path)
+        elif fs.is_file(path):
             sock.queue_command([command, path + ' is not a directory'])
             return None
         else:
@@ -53,9 +51,9 @@ class MasterServer(ProtocolThread):
             return None
 
     def validate_file(self, command, sock, path):
-        if self.fs.is_file(path):
-            return self.fs._get_file(path)
-        elif self.fs.is_directory(path):
+        if fs.is_file(path):
+            return fs._get_file(path)
+        elif fs.is_directory(path):
             sock.queue_command([command, path + ' is not a file'])
             return None
         else:
@@ -80,7 +78,7 @@ class MasterServer(ProtocolThread):
 
     def handle_mkdir(self, sock, payload):
         path = payload[0]
-        successful = self.fs.create_directory(path)
+        successful = fs.create_directory(path)
         if successful:
             sock.queue_command(['mkdir', path + ' created successfully'])
         else:
@@ -95,11 +93,7 @@ class MasterServer(ProtocolThread):
     def handle_upload_chunk(self, sock, payload):
         path = payload[0]
         chunk = payload[1]
-        success = False
-        if self.fs.exists(path) and self.fs._is_file(path):
-            success = True
-        else:
-            success = self.fs.create_file(path)
+        success = fs.is_file(path) or fs.create_file(path)
         if success:
             manipulator = ChunkManipulator(sock)
             self.remove_socket(sock, should_close=False)
@@ -107,22 +101,22 @@ class MasterServer(ProtocolThread):
         else:
             sock.queue_command(['upload_chunk', 'unsuccessful'])
 
-    def handle_map_reduce(self, sock, payload):
+    def handle_map_reduce_upload(self, sock, payload):
         path = payload[0]
         path_results = payload[1]
         map_mod = payload[2]
         combine_mod = None
-        if payload[3]!='0':
+        if payload[3] != '0':
             combine_mod = payload[3]
         reduce_mod = payload[4]
-        # file = self.validate_file('map_reduce', sock, path) -- TODO:  Why are we validating this?
-        successful = self.fs.create_file(path_results)
-        if successful:
-            self.sock_with_map_request = sock
-            self.mr_dispatcher = MapReduceDispatcher(self, sock, path, path_results, map_mod, combine_mod, reduce_mod)
-            self.mr_dispatcher.start()
-        else:
-            sock.queue_command(['map_reduce_response', 'unsuccessful'])
+        if self.validate_file('map_reduce', sock, path):
+            successful = fs.create_file(path_results)
+            if successful:
+                self.sock_with_map_request = sock
+                self.mr_dispatcher = MapReduceDispatcher(self, sock, path, path_results, map_mod, combine_mod, reduce_mod)
+                self.mr_dispatcher.start()
+            else:
+                sock.queue_command(['map_reduce_response', 'unsuccessful'])
 
     def handle_map_response(self, sock, payload):
         follower_ip_addr = payload[0]
@@ -133,14 +127,14 @@ class MasterServer(ProtocolThread):
             mapped_chunk_id = payload[2]
             map_result_chunk_id = payload[3]
             # Update Counts
-            if self.mr_dispatcher.counts == []:
+            if len(self.mr_dispatcher.counts) == 0:
                 for i in range(3, len(payload)):
                     self.mr_dispatcher.counts.append(float(payload[i]))
             else:
                 for i in range(3, len(payload)):
                     self.mr_dispatcher.counts[i] += float(payload[i])
             # Update Follower information
-            follower = self.followers[follower_ip_addr]
+            follower = followers[follower_ip_addr]
             follower.current_task = FollowerTask.NONE
             follower.map_result_chunks.append(Chunk(map_result_chunk_id, follower))
             # Update Follower Task semaphore
@@ -170,8 +164,8 @@ class MasterServer(ProtocolThread):
 
 class FollowerAcceptor(ProtocolThread):
     
-    def __init__(self, master_server):
-        ProtocolThread.__init__(self, master_server.this_ip_addr, loc.master_follower_port, is_server=True)
+    def __init__(self):
+        ProtocolThread.__init__(self, 'localhost', loc.master_follower_port, is_server=True)
 
     def run(self):
         while len(self.socks) > 0:
@@ -181,41 +175,47 @@ class FollowerAcceptor(ProtocolThread):
                 if self.accept_socket and ready == self.accept_socket:
                     sock, address = ready.accept()
                     follower_sock = TinyDataProtocolSocket(self, sock)
-                    master_server.socks_append(follower_sock)
-                    master_server.followers[address] = Follower(sock, address)
+                    follower_sock.handle_close()
+                    followers[address] = Follower(address)
 
 
-class ChunkManipulator(Thread):
+class ChunkManipulator(ProtocolThread):
 
-    def __init__(self, sock):
-        self.sock = sock
+    def __init__(self, client_sock):
+        ProtocolThread.__init__(self, is_server=False)
+        self.client_sock = client_sock
+        self.socks.append(self.client_sock)
+        self.commands = {
+            'store_chunk': self.handle_store_chunk,
+            'remove_chunk': self.handle_remove_chunk
+        }
 
     def handle_store_chunk(self, sock, payload):
-        self.sock.queue_command(['upload_chunk', 'chunk stored successfully'])
+        self.client_sock.queue_command(['upload_chunk', 'chunk stored successfully'])
 
     def handle_remove_chunk(self, sock, payload):
-        self.sock.queue_command(['remove_chunk', 'removed successfully'])
+        self.client_sock.queue_command(['remove_chunk', 'removed successfully'])
 
     def send_store_chunk(self, path, chunk):
         chunk_id = str(uuid.uuid4())
         # Write replications to followers with least storage
-        followers_to_write = self.fs.get_followers_least_filled(self.fs.REPLICA_TIMES)
-        self.fs.add_chunk_to_file(path, chunk_id, followers_to_write)
+        followers_to_write = fs.get_followers_least_filled(REPLICA_TIMES)
+        follower_locations = map(lambda f: f.ip_addr, followers_to_write)
+        fs.add_chunk_to_file(path, chunk_id, follower_locations)
         for follower in followers_to_write:
             follower.sock.queue_command(['store_chunk', path, chunk_id, chunk])
 
     def send_remove(self, path):
-        for chunk_id, locations in self.fs.get_file_chunks(path).iteritems():
+        for chunk_id, locations in fs.get_file_chunks(path).iteritems():
             for location in locations:
-                sock = self.add_socket(location, loc.follower_listen_port)
+                sock = self.add_socket(location, loc.follower_port)
                 sock.queue_command(['remove_chunk', path, chunk_id])
-        self.fs.remove(path)
-
+        fs.remove(path)
 
 
 class MapReduceDispatcher(Thread):
 
-    def __init__(self, master_server, path, path_results, map_mod, combine_mod, reduce_mod):
+    def __init__(self, master_server, sock, path, path_results, map_mod, combine_mod, reduce_mod):
         self.master_server = master_server
         self.path = path
         self.path_results = path_results
@@ -230,10 +230,10 @@ class MapReduceDispatcher(Thread):
 
         self.outstanding_chunks_to_map = []
         self.outstanding_chunks_to_map_lock = Lock()
-        self.oustanding_chunks_to_map_cond = Condition(self.outstand_chunks_to_map_lock)
+        self.outstanding_chunks_to_map_cond = Condition(self.outstanding_chunks_to_map_lock)
 
         self.outstanding_reduce_followers = []
-        self.outstanding_reduce_followers_mutex = Lock()
+        self.outstanding_reduce_followers_lock = Lock()
 
         self.followers_with_map = {}
 
@@ -266,7 +266,7 @@ class MapReduceDispatcher(Thread):
                     if self.combine_mod and not cur_follower.has_combine_mod:
                         combine_mod_out = self.combine_mod
                         cur_follower.has_combine_mod = True
-                    with self.oustanding_chunks_to_map_cond:
+                    with self.outstanding_chunks_to_map_cond:
                         self.outstanding_chunks_to_map.append(cur_chunk)
                     cur_follower.sock.queue_command(['map', '0', cur_chunk.chunk_id, map_mod_out, combine_mod_out])
                     if not self.followers_with_map.has_key(cur_follower.ip_addr):
@@ -278,7 +278,7 @@ class MapReduceDispatcher(Thread):
                 chunks_to_map.append(cur_chunk)
                 chunks_passed += 1
 
-            if chunks_passed == len(chunks_to_map):
+            if chunks_passed == len(chunks_to_map_list):
                 # Passed through entire list and no available followers match ones we need
                 # Block until another becomes available
                 with self.all_passed_cond:
@@ -287,7 +287,7 @@ class MapReduceDispatcher(Thread):
                         self.all_passed_cond.wait()
 
         # Wait for all outstanding map tasks to be complete
-        with self.oustanding_chunks_to_map_cond:
+        with self.outstanding_chunks_to_map_cond:
             while len(self.outstanding_chunks_to_map) > 0:
                 self.full_pass_cond.wait()
 
@@ -307,5 +307,5 @@ class MapReduceDispatcher(Thread):
             for map_chunk in follower.map_result_chunks:
                 command.append(map_chunk)
             follower.sock.queue_command(command)
-            with self.outstanding_reduce_followers_mutex:
+            with self.outstanding_reduce_followers_lock:
                 self.outstanding_reduce_followers[follower.ip_addr] = follower

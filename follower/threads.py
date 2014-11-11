@@ -1,6 +1,7 @@
 import sys
 from collections import defaultdict
 import os
+from uuid import uuid4
 import cPickle as pickle
 from threading import Thread
 
@@ -20,13 +21,10 @@ chunk_id_last_assigned = 0
 
 class FollowerServer(ProtocolThread):
 
-    def __init__(self, this_ip_addr, master_ip_addr):
-        ProtocolThread.__init__(self, this_ip_addr, loc.follower_port, is_server=False)
+    def __init__(self, master_ip_addr):
+        ProtocolThread.__init__(self, 'localhost', loc.follower_port, is_server=True)
         # Connect to master
         self.master_sock = self.add_socket((master_ip_addr, loc.master_follower_port))
-        
-        self.this_ip_addr = this_ip_addr
-
         self.commands = {
             'store_chunk': self.handle_store_chunk,
             'remove_chunk': self.handle_remove_chunk,
@@ -144,10 +142,10 @@ class Mapper(Thread):
                         result_list.append((key, val))
             # Pickle results into written file
             results_chunk_id = FollowerServer.get_next_free_chunk()
-            with open(get_filepath(results_chunk_id),'w') as f:
+            with open(get_filepath(results_chunk_id), 'w') as f:
                 pickle.dump(result_list, f)
             # Send updates to master
-            command = ['map_response', self.follower.this_ip_addr, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
+            command = ['map_response', str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)

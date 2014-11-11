@@ -1,14 +1,13 @@
-import cPickle
 from collections import defaultdict
-import os
 
-from common.util import get_filepath
-from master.chunk import *
+from master.chunk import Chunk
+from master.threads import followers
 
+
+REPLICA_TIMES = 2
 
 
 # a dict-based file system
-
 class FileSystem(object):
     _instance = None
 
@@ -17,12 +16,10 @@ class FileSystem(object):
             cls._instance = super(FileSystem, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def __init__(self, master_server):
-        self.REPLICA_TIMES = 2
+    def __init__(self):
         self.dict = self._new_dict()
         self.dict['is_directory'] = True
         self.dict['children'] = self._new_dict()
-        self.master_server = master_server
 
     def _new_dict(self):
         return defaultdict(lambda: None)
@@ -132,75 +129,9 @@ class FileSystem(object):
         return None
 
     def compare_follower_storage(self, f1, f2):
-        if f1.bytes_stored < f2.bytes_stored:
-            return -1
-        if f2.bytes_stored > f2.bytes_stored:
-            return 1
-        return 0
+        return f1.bytes_stored - f2.bytes_stored
 
     def get_followers_least_filled(self, num_followers):
-        sorted_list = sorted(self.master_server.followers.values(), self.compare_follower_storage)
+        sorted_list = sorted(followers.values(), self.compare_follower_storage)
         return_num = min(num_followers, len(sorted_list))
         return sorted_list[:return_num]
-
-
-
-# A file based alternative (harder to synchronize)
-
-class Node(object):
-
-    def __init__(self, path):
-        self.path = get_filepath(path)
-        self.is_file = os.path.isfile(self.path)
-        self.is_directory = os.path.isdir(self.path)
-
-    def is_file(self):
-        return self.is_file
-
-    def is_directory(self):
-        return self.is_directory
-
-    def exists(self):
-        return os.path.exists(self.path)
-
-    def remove(self):
-        pass
-
-    def save(self):
-        if not self.exists():
-            if type(self) is File:
-                pass
-            elif type(self) is Directory:
-                os.mkdir(self.path)
-            self.exists = True
-        path = self.path
-        if type(self) is Directory:
-            path = os.path.join(path, '.dir')
-        with open(path, 'w') as out_file:
-            cPickle.dump(self, out_file)
-
-    @staticmethod
-    def restore(path):
-        path = get_filepath(path)
-        if os.path.isdir(path):
-            path = os.path.join(path, '.dir')
-        with open(path, 'r') as in_file:
-            return cPickle.load(in_file)
-
-
-class File(Node):
-
-    def __init__(self, path, split_character, split_frequency):
-        Node.__init__(self, path)
-        self.split_character = split_character
-        self.split_frequency = split_frequency
-        self.chunks = []
-
-
-class Directory(Node):
-
-    def __init__(self, path):
-        Node.__init__(self, path)
-
-    def get_contents(self):
-        return os.listdir(self.path)
