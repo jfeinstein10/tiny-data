@@ -9,7 +9,7 @@ class ClientThread(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, is_server=False)
-        self.sock = self.add_socket(loc.master_ip, loc.master_listen_port)
+        self.sock = self.add_socket(loc.master_ip, loc.master_client_port)
         self.complete = False
         self.commands = {
             'ls': self.handle_result,

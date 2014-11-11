@@ -6,7 +6,10 @@ from threading import Thread
 
 import common.locations as loc
 from common.threads import ProtocolThread
-from common.util import get_filepath, deserialize_module, ReturnStatus, get_tinydata_base
+from common.util import get_filepath, deserialize_module, ReturnStatus, get_tinydata_base, get_own_ip_address
+
+
+own_ip_address = get_own_ip_address()
 
 
 def get_next_free_chunk():
@@ -20,6 +23,7 @@ class FollowerServer(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, 'localhost', loc.follower_port, is_server=True)
+        master_sock = self.add_socket(loc.master_ip, loc.master_follower_port)
         self.commands = {
             'store_chunk': self.handle_store_chunk,
             'remove_chunk': self.handle_remove_chunk,
@@ -90,8 +94,8 @@ class Mapper(Thread):
 
     def __init__(self, master_sock, chunk_id, map_fn, combine_fn):
         Thread.__init__(self)
-        self.chunk_id = chunk_id
         self.master_sock = master_sock
+        self.chunk_id = chunk_id
         self.map_fn = map_fn
         self.combine_fn = combine_fn
 
@@ -119,7 +123,7 @@ class Mapper(Thread):
             with open(get_filepath(results_chunk_id), 'w') as f:
                 pickle.dump(result_list, f)
             # Send updates to master
-            command = ['map_response', str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
+            command = ['map_response', own_ip_address, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)
@@ -152,7 +156,7 @@ class Reducer(Thread):
             with open(get_filepath(self.result_chunk_id), 'w') as f:
                 pickle.dump(final_keyvals, f)
             # Send updates to master
-            command = ['reduce_response', self.follower.this_ip_addr, str(ReturnStatus.SUCCESS)]
+            command = ['reduce_response', own_ip_address, str(ReturnStatus.SUCCESS)]
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)

@@ -1,7 +1,6 @@
 from collections import defaultdict
 
 from master.chunk import Chunk
-from master.threads import followers
 
 
 REPLICA_TIMES = 2
@@ -127,11 +126,3 @@ class FileSystem(object):
             del parent['children'][filename]
             return child
         return None
-
-    def compare_follower_storage(self, f1, f2):
-        return f1.bytes_stored - f2.bytes_stored
-
-    def get_followers_least_filled(self, num_followers):
-        sorted_list = sorted(followers.values(), self.compare_follower_storage)
-        return_num = min(num_followers, len(sorted_list))
-        return sorted_list[:return_num]

@@ -1,4 +1,4 @@
-from threading import Lock, Semaphore, Condition, Thread
+from threading import Lock
 import uuid
 
 import common.locations as loc
@@ -7,7 +7,7 @@ from common.threads import ProtocolThread
 from common.util import ReturnStatus
 from master.chunk import Chunk
 from master.file_system import FileSystem, REPLICA_TIMES
-from master.follower import *
+from master.follower_cls import Follower, FollowerTask
 from Queue import Queue
 
 
@@ -126,7 +126,7 @@ class FollowerAcceptor(ProtocolThread):
                 if self.accept_socket and ready == self.accept_socket:
                     sock, address = ready.accept()
                     follower_sock = TinyDataProtocolSocket(self, sock)
-                    follower_sock.handle_close()
+                    self.remove_socket(follower_sock, should_close=True)
                     followers[address] = Follower(address)
 
 
@@ -150,7 +150,7 @@ class ChunkManipulator(ProtocolThread):
     def send_store_chunk(self, path, chunk):
         chunk_id = str(uuid.uuid4())
         # Write replications to followers with least storage
-        followers_to_write = fs.get_followers_least_filled(REPLICA_TIMES)
+        followers_to_write = get_followers_least_filled(REPLICA_TIMES)
         follower_locations = map(lambda f: f.ip_addr, followers_to_write)
         fs.add_chunk_to_file(path, chunk_id, follower_locations)
         for follower in followers_to_write:
@@ -294,3 +294,13 @@ class MapReduceDispatcher(ProtocolThread):
         self.assign_map()
         while len(self.socks) > 0:
             self.select_iteration()
+
+
+def compare_follower_storage(f1, f2):
+    return f1.bytes_stored - f2.bytes_stored
+
+
+def get_followers_least_filled(num_followers):
+    sorted_list = sorted(followers.values(), compare_follower_storage)
+    return_num = min(num_followers, len(sorted_list))
+    return sorted_list[:return_num]

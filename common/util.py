@@ -1,5 +1,6 @@
 import imp
 import os
+import socket
 import tempfile
 import zlib
 
@@ -63,3 +64,7 @@ def deserialize_module(module_contents):
 class ReturnStatus(object):
     FAIL = 0
     SUCCESS = 1
+
+
+def get_own_ip_address():
+    return socket.gethostbyname(socket.gethostname())

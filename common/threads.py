@@ -67,7 +67,7 @@ class ProtocolThread(Thread, TinyDataProtocol):
             except socket.error, e:
                 self.remove_socket(ready)
 
-    def socks_append(sock):
+    def socks_append(self, sock):
         with self.socks_lock:
             self.socks.append(sock)
 
