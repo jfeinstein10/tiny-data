@@ -1,9 +1,11 @@
 import uuid
+from collections import defaultdict
+import cPickle as pickle
 
 import common.locations as loc
 from common.communication import TinyDataProtocolSocket
 from common.threads import ProtocolThread
-from common.util import ReturnStatus
+from common.util import ReturnStatus, deserialize_module
 from master.file_system import FileSystem, REPLICA_TIMES
 
 
@@ -178,6 +180,7 @@ class MapReduceDispatcher(ProtocolThread):
         self.map_mod = map_mod
         self.combine_mod = combine_mod
         self.reduce_mod = reduce_mod
+        self.reduce_fn = deserialize_module(self.reduce_mod).reduce_fn
         self.counts = []
 
         self.chunks = dict(fs.get_file_chunks(self.path))
@@ -186,6 +189,7 @@ class MapReduceDispatcher(ProtocolThread):
         self.map_chunks_assigned = []
         self.map_chunks_completed = []
         self.map_result_chunks = {follower.ip_addr: [] for follower in followers}
+        self.map_key_values = defaultdict(lambda: [])
 
         self.outstanding_reduce_followers = []
         self.followers_with_map = {}
@@ -203,8 +207,11 @@ class MapReduceDispatcher(ProtocolThread):
         else:
             chunk_id = payload[2]
             result_chunk_id = payload[3]
+            pairs = pickle.loads(payload[4])
+            for key, value in pairs:
+                self.map_key_values[key].append(value)
             # Update Counts
-            new_counts = map(lambda x: float(x), payload[4:])
+            new_counts = map(lambda x: float(x), payload[5:])
             if len(self.counts) == 0:
                 self.counts = new_counts
             else:
@@ -216,7 +223,7 @@ class MapReduceDispatcher(ProtocolThread):
             # Assign a new chunk to map
             self.assign_map(follower_ip_addr, sock)
             if len(self.map_chunks_assigned) == 0:
-                self.assign_reduce()
+                self.perform_reduce()
 
     def handle_reduce_response(self, sock, payload):
         follower_ip_addr = payload[0]
@@ -241,6 +248,16 @@ class MapReduceDispatcher(ProtocolThread):
                 return
         if sock:
             self.remove_socket(sock, True)
+
+    def perform_reduce(self):
+        final_keyvals = {}
+        for key, values in self.map_key_values.iteritems():
+            final_keyvals[key] = self.reduce_fn(key, values)
+        # self.client_sock.queue_command(['map_reduce', 'successful'])
+        manipulator = ChunkManipulator(self.client_sock)
+        manipulator.send_store_chunk(self.path_results, pickle.dumps(final_keyvals))
+        manipulator.start()
+        print final_keyvals
 
     def assign_reduce(self):
         # Assign reduces

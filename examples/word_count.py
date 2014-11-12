@@ -1,7 +1,7 @@
 
 
 def map_fn(line):
-    words = line.split()
+    words = line.split(',')
     return [(word, 1) for word in words]
 
 

@@ -133,7 +133,7 @@ class Mapper(Thread):
             with open(get_filepath(results_chunk_id), 'w') as f:
                 pickle.dump(result_list, f)
             # Send updates to master
-            command = ['map_response', own_ip_address, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id)]
+            command = ['map_response', own_ip_address, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id), pickle.dumps(result_list)]
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)
@@ -150,23 +150,23 @@ class Reducer(Thread):
 
     def run(self):
         if self.reduce_fn:
-            # Collect key,values from map files into list
-            keyvals = []
+            # Collect key, values from map files into list
+            keyvals = {}
             for chunk_id in self.map_chunk_ids:
                 with open(get_filepath(chunk_id), 'r') as f:
                     map_results = pickle.load(f)
-                    for pair in map_results:
-                        keyvals.append(pair)
+                    for key, value in map_results:
+                        if key in keyvals:
+                            keyvals[key].append(value)
+                        else:
+                            keyvals[key] = [value]
             # Perform reduce
             final_keyvals = {}
-            pairs, counts = self.reduce_fn(keyvals)
-            for key, val in pairs:
-                final_keyvals[key] = val
+            for key, values in keyvals.iteritems():
+                final_keyvals[key] = self.reduce_fn(key, values)
             # Write pickeled results to file
             with open(get_filepath(self.result_chunk_id), 'w') as f:
                 pickle.dump(final_keyvals, f)
             # Send updates to master
             command = ['reduce_response', own_ip_address, str(ReturnStatus.SUCCESS)]
-            for count in counts:
-                command.append(str(count))
             self.master_sock.queue_command(command)
