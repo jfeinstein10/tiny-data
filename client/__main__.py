@@ -21,7 +21,9 @@ ls_parser.add_argument('path', help='Get the contents of the file in the DFS at 
 map_reduce_parser = subparsers.add_parser('map_reduce')
 map_reduce_parser.add_argument('path', help='Run the map reduce job over the file in the DFS at this path')
 map_reduce_parser.add_argument('results_path', help='Store the results in the DFS at this path')
-map_reduce_parser.add_argument('job_path', help='A python map reduce job file, which defines map_fn and reduce_fn')
+map_reduce_parser.add_argument('map', help='A python file, which defines map_fn')
+map_reduce_parser.add_argument('reduce', help='A python file, which defines reduce_fn')
+map_reduce_parser.add_argument('--combine', default=None, help='A python file, which defines combine_fn')
 
 upload_parser = subparsers.add_parser('upload')
 upload_parser.add_argument('path', help='Store the data in the DFS at this path')
@@ -36,7 +38,7 @@ def main():
     if args.command in ['ls', 'rm', 'mkdir', 'cat']:
         c_thread.send_simple(args.command, args.path)
     elif args.command == 'map_reduce':
-        c_thread.send_map_reduce(args.path, args.results_path, args.job_path)
+        c_thread.send_map_reduce(args.path, args.results_path, args.map, args.reduce, args.combine)
     elif args.command == 'upload':
         c_thread.send_upload(args.path, args.local_path, args.lines_per_chunk)
     c_thread.start()

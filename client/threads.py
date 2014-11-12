@@ -28,9 +28,14 @@ class ClientThread(ProtocolThread):
     def send_simple(self, command, path):
         self.sock.queue_command([command, path])
 
-    def send_map_reduce(self, path, results_path, job_path):
-        job_contents = serialize_module(job_path)
-        self.sock.queue_command(['map_reduce', path, results_path, job_contents])
+    def send_map_reduce(self, path, results_path, map_path, reduce_path, combine_path=None):
+        map_contents = serialize_module(map_path)
+        reduce_contents = serialize_module(map_path)
+        if combine_path:
+            combine_contents = serialize_module(map_path)
+        else:
+            combine_contents = '0'
+        self.sock.queue_command(['map_reduce', path, results_path, map_contents, combine_contents, reduce_contents])
 
     def send_upload(self, path, local_path, lines_per_chunk):
         print path, local_path, lines_per_chunk

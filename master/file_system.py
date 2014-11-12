@@ -1,7 +1,5 @@
 from collections import defaultdict
 
-from master.chunk import Chunk
-
 
 REPLICA_TIMES = 2
 
@@ -88,7 +86,7 @@ class FileSystem(object):
             else:
                 file = self._new_dict()
                 file['is_file'] = True
-                file['chunks'] = []
+                file['chunks'] = {}
                 parent['children'][filename] = file
                 return True
         return False
@@ -113,8 +111,7 @@ class FileSystem(object):
     def add_chunk_to_file(self, path, chunk_id, followers):
         file = self._get_file(path)
         if self._is_file(file):
-            new_chunk = Chunk(chunk_id, followers)
-            file['chunks'].append(new_chunk)
+            file['chunks'][chunk_id] = followers
             return True
         return False
 

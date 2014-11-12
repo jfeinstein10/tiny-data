@@ -16,14 +16,16 @@ def get_next_free_chunk():
     while True:
         uuid = uuid4()
         if uuid not in os.listdir(get_tinydata_base()):
-            return uuid
+            return str(uuid)
 
 
 class FollowerServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, 'localhost', loc.follower_port, is_server=True)
+        ProtocolThread.__init__(self, own_ip_address, loc.follower_port, is_server=True)
         master_sock = self.add_socket(loc.master_ip, loc.master_follower_port)
+        master_sock.send(own_ip_address)
+        self.remove_socket(master_sock)
         self.commands = {
             'store_chunk': self.handle_store_chunk,
             'remove_chunk': self.handle_remove_chunk,
@@ -102,10 +104,18 @@ class Mapper(Thread):
     def run(self):
         if self.map_fn:
             # Perform map and collect results in dictionary
-            result_dict = defaultdict([])
+            counts = []
+            result_dict = defaultdict(lambda: [])
             with open(get_filepath(self.chunk_id), 'r') as data:
                 for line in data:
-                    pairs, counts = self.map_fn(line)
+                    response = self.map_fn(line)
+                    pairs = response
+                    if isinstance(response, tuple):
+                        pairs, new_counts = response
+                        if len(counts) == 0:
+                            counts = new_counts
+                        else:
+                            counts = map(lambda x: x[0]+x[1], counts, new_counts)
                     for key, value in pairs:
                         result_dict[key].append(value)
             # Put results into list

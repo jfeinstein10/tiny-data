@@ -46,7 +46,7 @@ def load_module(module_path):
 
 def serialize_module(module_path):
     with open(module_path, 'r') as module_file:
-        return zlib.compress(module_file.readlines())
+        return zlib.compress(''.join(module_file.readlines()))
 
 
 def deserialize_module(module_contents):

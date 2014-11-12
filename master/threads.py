@@ -1,18 +1,20 @@
-from threading import Lock
 import uuid
 
 import common.locations as loc
 from common.communication import TinyDataProtocolSocket
 from common.threads import ProtocolThread
 from common.util import ReturnStatus
-from master.chunk import Chunk
 from master.file_system import FileSystem, REPLICA_TIMES
-from master.follower_cls import Follower, FollowerTask
-from Queue import Queue
 
 
-followers = {}
+followers = []
 fs = FileSystem()
+
+
+class Follower(object):
+
+    def __init__(self, ip_addr):
+        self.ip_addr = ip_addr
 
 
 class MasterServer(ProtocolThread):
@@ -93,6 +95,7 @@ class MasterServer(ProtocolThread):
             manipulator = ChunkManipulator(sock)
             self.remove_socket(sock, should_close=False)
             manipulator.send_store_chunk(path, chunk)
+            manipulator.start()
         else:
             sock.queue_command(['upload_chunk', 'unsuccessful'])
 
@@ -100,17 +103,15 @@ class MasterServer(ProtocolThread):
         path = payload[0]
         path_results = payload[1]
         map_mod = payload[2]
-        combine_mod = None
+        combine_mod = '0'
         if payload[3] != '0':
             combine_mod = payload[3]
         reduce_mod = payload[4]
-        if self.validate_file('map_reduce', sock, path):
-            successful = fs.create_file(path_results)
-            if successful:
-                mr_dispatcher = MapReduceDispatcher(sock, path, path_results, map_mod, combine_mod, reduce_mod)
-                mr_dispatcher.start()
-            else:
-                sock.queue_command(['map_reduce_response', 'unsuccessful'])
+        if self.validate_file('map_reduce', sock, path) and fs.create_file(path_results):
+            mr_dispatcher = MapReduceDispatcher(sock, path, path_results, map_mod, combine_mod, reduce_mod)
+            mr_dispatcher.start()
+        else:
+            sock.queue_command(['map_reduce_response', 'unsuccessful'])
 
 
 class FollowerAcceptor(ProtocolThread):
@@ -120,14 +121,16 @@ class FollowerAcceptor(ProtocolThread):
 
     def run(self):
         while len(self.socks) > 0:
+            print followers
             ready_for_read, ready_for_write = self.select()
             # we can read
             for ready in ready_for_read:
                 if self.accept_socket and ready == self.accept_socket:
                     sock, address = ready.accept()
                     follower_sock = TinyDataProtocolSocket(self, sock)
-                    self.remove_socket(follower_sock, should_close=True)
-                    followers[address] = Follower(address)
+                    ip_address = follower_sock.recv(1024)
+                    follower_sock.handle_close()
+                    followers.append(Follower(ip_address))
 
 
 class ChunkManipulator(ProtocolThread):
@@ -153,8 +156,9 @@ class ChunkManipulator(ProtocolThread):
         followers_to_write = get_followers_least_filled(REPLICA_TIMES)
         follower_locations = map(lambda f: f.ip_addr, followers_to_write)
         fs.add_chunk_to_file(path, chunk_id, follower_locations)
-        for follower in followers_to_write:
-            follower.sock.queue_command(['store_chunk', path, chunk_id, chunk])
+        for location in follower_locations:
+            sock = self.add_socket(location, loc.follower_port)
+            sock.queue_command(['store_chunk', path, chunk_id, chunk])
 
     def send_remove(self, path):
         for chunk_id, locations in fs.get_file_chunks(path).iteritems():
@@ -176,13 +180,16 @@ class MapReduceDispatcher(ProtocolThread):
         self.reduce_mod = reduce_mod
         self.counts = []
 
-        self.outstanding_chunks_to_map = []
-        self.outstanding_chunks_to_map_lock = Lock()
+        self.chunks = dict(fs.get_file_chunks(self.path))
+        self.current_assignments = {follower.ip_addr: None for follower in followers}
+
+        self.map_chunks_assigned = []
+        self.map_chunks_completed = []
+        self.map_result_chunks = {follower.ip_addr: [] for follower in followers}
 
         self.outstanding_reduce_followers = []
-        self.outstanding_reduce_followers_lock = Lock()
-
         self.followers_with_map = {}
+
         self.commands = {
             'map_response':  self.handle_map_response,
             'reduce_response':  self.handle_reduce_response
@@ -194,81 +201,46 @@ class MapReduceDispatcher(ProtocolThread):
         if not (return_status == ReturnStatus.SUCCESS):
             self.client_sock.queue_command(['map_reduce_response', 'unsuccessful'])
         else:
-            mapped_chunk_id = payload[2]
-            map_result_chunk_id = payload[3]
+            chunk_id = payload[2]
+            result_chunk_id = payload[3]
             # Update Counts
+            new_counts = map(lambda x: float(x), payload[4:])
             if len(self.counts) == 0:
-                for i in range(3, len(payload)):
-                    self.counts.append(float(payload[i]))
+                self.counts = new_counts
             else:
-                for i in range(3, len(payload)):
-                    self.counts[i] += float(payload[i])
-            # Update Follower information
-            follower = followers[follower_ip_addr]
-            follower.current_task = FollowerTask.NONE
-            follower.map_result_chunks.append(Chunk(map_result_chunk_id, follower))
+                self.counts = map(lambda x: x[0] + x[1], zip(self.counts, new_counts))
             # Remove chunk from outstanding list
-            with self.outstanding_chunks_to_map_lock:
-                for chunk in self.outstanding_chunks_to_map:
-                    if chunk.chunk_id == mapped_chunk_id:
-                        self.outstanding_chunks_to_map.remove(chunk)
-                if len(self.outstanding_chunks_to_map) == 0:
-                    self.assign_reduce()
+            self.map_chunks_assigned.remove(chunk_id)
+            self.map_chunks_completed.append(chunk_id)
+            self.map_result_chunks[follower_ip_addr].append(result_chunk_id)
+            # Assign a new chunk to map
+            self.assign_map(follower_ip_addr, sock)
+            if len(self.map_chunks_assigned) == 0:
+                self.assign_reduce()
 
     def handle_reduce_response(self, sock, payload):
         follower_ip_addr = payload[0]
         return_status = int(payload[1])
         if return_status == ReturnStatus.SUCCESS:
-            with self.outstanding_reduce_followers_lock:
-                self.outstanding_reduce_followers.pop(follower_ip_addr)
+            self.outstanding_reduce_followers.pop(follower_ip_addr)
             self.client_sock.queue_command(['map_reduce_response', 'successful'])
         else:
             self.client_sock.queue_command(['map_reduce_response', 'unsuccessful'])
 
-    def assign_map(self):
-        # Get chunk ids that need to be mapped
-        chunks_to_map_list = fs.get_file_chunks(self.path)
-        chunks_to_map = Queue()
-        for chunk in chunks_to_map_list:
-            chunks_to_map.put(chunk)
-
+    def assign_map(self, follower_ip, sock=None):
         # Assign all pieces to mapped
-        while not chunks_to_map.empty():
-            cur_chunk = chunks_to_map.get()
-            i = 0
-            follower_assigned_map = False
-            while i < len(cur_chunk.followers) and not follower_assigned_map:
-                cur_follower = cur_chunk.followers[i]
-                if cur_follower.current_task == FollowerTask.NONE:
-                    cur_follower.current_task = FollowerTask.MAP
-                    cur_follower.chunk_ids_mapped.append(cur_chunk.chunk_id)
-                    map_mod_out = '0'
-                    if self.map_mod and not cur_follower.has_map_mod:
-                        map_mod_out = self.map_mod
-                        cur_follower.has_map_mod = True
-                    combine_mod_out = '0'
-                    if self.combine_mod and not cur_follower.has_combine_mod:
-                        combine_mod_out = self.combine_mod
-                        cur_follower.has_combine_mod = True
-                    with self.outstanding_chunks_to_map_cond:
-                        self.outstanding_chunks_to_map.append(cur_chunk)
-                    cur_follower.sock.queue_command(['map', '0', cur_chunk.chunk_id, map_mod_out, combine_mod_out])
-                    if not self.followers_with_map.has_key(cur_follower.ip_addr):
-                        self.followers_with_map[cur_follower.ip_addr] = cur_follower
-                    follower_assigned_map = True
-                    chunks_passed = 0
-                i += 1
-            if not follower_assigned_map:
-                chunks_to_map.append(cur_chunk)
-                chunks_passed += 1
-
-            if chunks_passed == len(chunks_to_map_list):
-                # Passed through entire list and no available followers match ones we need
-                # Block until another becomes available
-                with self.all_passed_cond:
-                    self.all_passed = True
-                    while self.all_passed:
-                        self.all_passed_cond.wait()
+        for chunk_id, follower_ips in self.chunks.iteritems():
+            if chunk_id not in self.map_chunks_assigned \
+                    and chunk_id not in self.map_chunks_completed \
+                    and follower_ip in follower_ips:
+                self.current_assignments[follower_ip] = chunk_id
+                self.map_chunks_assigned.append(chunk_id)
+                if not sock:
+                    sock = self.add_socket(follower_ip, loc.follower_port)
+                sock.queue_command(['map', self.path, chunk_id, self.map_mod, self.combine_mod])
+                return
+        if sock:
+            self.remove_socket(sock, True)
 
     def assign_reduce(self):
         # Assign reduces
@@ -283,15 +255,15 @@ class MapReduceDispatcher(ProtocolThread):
             if self.reduce_mod and not follower.has_reduce_mod:
                 reduce_mod_out = self.reduce_mod
                 follower.has_reduce_mod = True
-            command = ['reduce', '0', reduce_mod_out, results_chunk_id]
+            command = ['reduce', reduce_mod_out, results_chunk_id]
             for map_chunk in follower.map_result_chunks:
                 command.append(map_chunk)
             follower.sock.queue_command(command)
-            with self.outstanding_reduce_followers_lock:
-                self.outstanding_reduce_followers[follower.ip_addr] = follower
+            self.outstanding_reduce_followers[follower.ip_addr] = follower
 
     def run(self):
-        self.assign_map()
+        for follower in followers:
+            self.assign_map(follower.ip_addr)
         while len(self.socks) > 0:
             self.select_iteration()
 
@@ -301,6 +273,6 @@ def compare_follower_storage(f1, f2):
 
 
 def get_followers_least_filled(num_followers):
-    sorted_list = sorted(followers.values(), compare_follower_storage)
+    sorted_list = sorted(followers, compare_follower_storage)
     return_num = min(num_followers, len(sorted_list))
     return sorted_list[:return_num]
