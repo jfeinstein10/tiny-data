@@ -7,7 +7,7 @@ from common import util
 
 DEFAULT_PORT = 8000
 MAX_LISTEN = 5
-PROTOCOL_PACKET_SIZE = 4096
+PROTOCOL_PACKET_SIZE = 8192
 PROTOCOL_TERMINATOR = '\0\0'
 PROTOCOL_DELIMITER = '\1\1'
 
@@ -83,11 +83,10 @@ class TinyDataProtocolSocket(TinyDataSocket):
         self.write_buffer = ''
 
     def handle_data(self, data):
-        offset = len(self.read_buffer)
         terminator = self.protocol.get_terminator()
         self.read_buffer += data
-        if terminator in self.read_buffer:
-            index = self.read_buffer.find(terminator, offset)
+        while terminator in self.read_buffer:
+            index = self.read_buffer.find(terminator)
             raw_command = self.read_buffer[:index]
             self.read_buffer = self.read_buffer[index+len(terminator):]
             self.protocol.handle_command(self, self.protocol.deserialize_command(raw_command))

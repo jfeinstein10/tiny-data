@@ -55,8 +55,8 @@ class FollowerServer(ProtocolThread):
         chunk_id = payload[1]
         path = get_filepath(chunk_id)
         with open(path, 'r') as f:
-            for line in f:
-                pass
+            contents = '/n'.join(f.readlines())
+            sock.queue_command(['get_chunk', contents])
 
     def handle_map(self, sock, payload):
         # Get map payload info

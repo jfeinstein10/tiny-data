@@ -11,6 +11,8 @@ class ClientThread(ProtocolThread):
         ProtocolThread.__init__(self, is_server=False)
         self.sock = self.add_socket(loc.master_ip, loc.master_client_port)
         self.complete = False
+        self.expected_results = 1
+        self.results = 0
         self.commands = {
             'ls': self.handle_result,
             'rm': self.handle_result,
@@ -23,7 +25,9 @@ class ClientThread(ProtocolThread):
 
     def handle_result(self, sock, payload):
         print payload[0]
-        self.remove_socket(sock)
+        self.results += 1
+        if self.results == self.expected_results:
+            self.remove_socket(sock)
 
     def send_simple(self, command, path):
         self.sock.queue_command([command, path])
@@ -39,6 +43,7 @@ class ClientThread(ProtocolThread):
 
     def send_upload(self, path, local_path, lines_per_chunk):
         print path, local_path, lines_per_chunk
+        self.expected_results = 0
         with open(local_path, 'r') as local_file:
             buff = ''
             count = 0
@@ -49,5 +54,7 @@ class ClientThread(ProtocolThread):
                     self.sock.queue_command(['upload_chunk', path, buff])
                     buff = ''
                     count = 0
+                    self.expected_results += 1
             if buff:
                 self.sock.queue_command(['upload_chunk', path, buff])
+                self.expected_results += 1

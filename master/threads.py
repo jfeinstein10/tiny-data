@@ -87,7 +87,10 @@ class MasterServer(ProtocolThread):
         path = payload[0]
         file = self.validate_file('cat', sock, path)
         if file:
+            manipulator = ChunkManipulator(sock)
             self.remove_socket(sock, should_close=False)
+            manipulator.send_get(path)
+            manipulator.start()
 
     def handle_upload_chunk(self, sock, payload):
         path = payload[0]
@@ -95,7 +98,7 @@ class MasterServer(ProtocolThread):
         success = fs.is_file(path) or fs.create_file(path)
         if success:
             manipulator = ChunkManipulator(sock)
-            self.remove_socket(sock, should_close=False)
+            # self.remove_socket(sock, should_close=False)
             manipulator.send_store_chunk(path, chunk)
             manipulator.start()
         else:
@@ -143,7 +146,8 @@ class ChunkManipulator(ProtocolThread):
         self.socks.append(self.client_sock)
         self.commands = {
             'store_chunk': self.handle_store_chunk,
-            'remove_chunk': self.handle_remove_chunk
+            'remove_chunk': self.handle_remove_chunk,
+            'get_chunk': self.handle_get_chunk
         }
 
     def handle_store_chunk(self, sock, payload):
@@ -151,6 +155,9 @@ class ChunkManipulator(ProtocolThread):
 
     def handle_remove_chunk(self, sock, payload):
         self.client_sock.queue_command(['remove_chunk', 'removed successfully'])
+
+    def handle_get_chunk(self, sock, payload):
+        self.client_sock.queue_command(['get_chunk', payload[0]])
 
     def send_store_chunk(self, path, chunk):
         chunk_id = str(uuid.uuid4())
@@ -168,6 +175,11 @@ class ChunkManipulator(ProtocolThread):
                 sock = self.add_socket(location, loc.follower_port)
                 sock.queue_command(['remove_chunk', path, chunk_id])
         fs.remove(path)
+
+    def send_get(self, path):
+        for chunk_id, locations in fs.get_file_chunks(path).iteritems():
+            sock = self.add_socket(locations[0], loc.follower_port)
+            sock.queue_command(['get_chunk', path, chunk_id])
 
 
 class MapReduceDispatcher(ProtocolThread):
