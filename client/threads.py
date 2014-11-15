@@ -13,15 +13,13 @@ class ClientThread(ProtocolThread):
         self.complete = False
         self.expected_results = 1
         self.results = 0
-        self.commands = {
-            'ls': self.handle_result,
-            'rm': self.handle_result,
-            'mkdir': self.handle_result,
-            'cat': self.handle_result,
-            'upload_chunk': self.handle_result,
-            'remove_chunk': self.handle_result,
-            'map_reduce': self.handle_result,
-        }
+        self.add_command('ls', self.handle_result)
+        self.add_command('rm', self.handle_result)
+        self.add_command('mkdir', self.handle_result)
+        self.add_command('cat', self.handle_result)
+        self.add_command('upload_chunk', self.handle_result)
+        self.add_command('remove_chunk', self.handle_result)
+        self.add_command('map_reduce', self.handle_result)
 
     def handle_result(self, sock, payload):
         print payload[0]
@@ -34,9 +32,9 @@ class ClientThread(ProtocolThread):
 
     def send_map_reduce(self, path, results_path, map_path, reduce_path, combine_path=None):
         map_contents = serialize_module(map_path)
-        reduce_contents = serialize_module(map_path)
+        reduce_contents = serialize_module(reduce_path)
         if combine_path:
-            combine_contents = serialize_module(map_path)
+            combine_contents = serialize_module(combine_path)
         else:
             combine_contents = '0'
         self.sock.queue_command(['map_reduce', path, results_path, map_contents, combine_contents, reduce_contents])

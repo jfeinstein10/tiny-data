@@ -129,8 +129,8 @@ class TinyDataProtocolSocket(TinyDataSocket):
                         if terminator_index >= 0:
                             # Read up until the terminator and then we have a new command
                             raw_response = self.read_and_update_buffer(terminator_index, len(self.terminator))
-                            self.current_command.streaming_callback(raw_response)
-                            self.current_command.end_callback()
+                            self.current_command.streaming_callback(self, raw_response)
+                            self.current_command.end_callback(self)
                             self.current_command = None
                         else:
                             # Dump the whole thing and then break
@@ -167,8 +167,8 @@ class TinyDataProtocol(object):
         self.terminator = terminator
         self.delimiter = delimiter
 
-    def add_command(self, name, num_args, end_callback=None):
-        self._commands[name] = ProtocolCommand(name, num_args, False, end_callback=end_callback)
+    def add_command(self, name, end_callback=None):
+        self._commands[name] = ProtocolCommand(name, streaming=False, end_callback=end_callback)
 
     def add_streaming_command(self, name, num_args, start_callback, streaming_callback, end_callback):
         self._commands[name] = ProtocolCommand(name, num_args, True, start_callback, streaming_callback, end_callback)

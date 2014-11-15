@@ -23,14 +23,12 @@ class MasterServer(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, 'localhost', loc.master_client_port, is_server=True)
-        self.commands = {
-            'ls': self.handle_ls,
-            'rm': self.handle_rm,
-            'mkdir': self.handle_mkdir,
-            'cat': self.handle_cat,
-            'upload_chunk': self.handle_upload_chunk,
-            'map_reduce': self.handle_map_reduce_upload,
-        }
+        self.add_command('ls', self.handle_ls)
+        self.add_command('rm', self.handle_rm)
+        self.add_command('mkdir', self.handle_mkdir)
+        self.add_command('cat', self.handle_cat)
+        self.add_command('upload_chunk', self.handle_upload_chunk)
+        self.add_command('map_reduce', self.handle_map_reduce_upload)
 
     def validate_exists(self, command, sock, path):
         if fs.exists(path):
@@ -120,7 +118,7 @@ class MasterServer(ProtocolThread):
 
 
 class FollowerAcceptor(ProtocolThread):
-    
+
     def __init__(self):
         ProtocolThread.__init__(self, 'localhost', loc.master_follower_port, is_server=True)
 
@@ -144,11 +142,9 @@ class ChunkManipulator(ProtocolThread):
         ProtocolThread.__init__(self, is_server=False)
         self.client_sock = client_sock
         self.socks.append(self.client_sock)
-        self.commands = {
-            'store_chunk': self.handle_store_chunk,
-            'remove_chunk': self.handle_remove_chunk,
-            'get_chunk': self.handle_get_chunk
-        }
+        self.add_command('store_chunk', self.handle_store_chunk)
+        self.add_command('remove_chunk', self.handle_remove_chunk)
+        self.add_command('get_chunk', self.handle_get_chunk)
 
     def handle_store_chunk(self, sock, payload):
         self.client_sock.queue_command(['upload_chunk', 'chunk stored successfully'])
@@ -206,10 +202,8 @@ class MapReduceDispatcher(ProtocolThread):
         self.outstanding_reduce_followers = []
         self.followers_with_map = {}
 
-        self.commands = {
-            'map_response':  self.handle_map_response,
-            'reduce_response':  self.handle_reduce_response
-        }
+        self.add_command('map_response', self.handle_map_response)
+        self.add_command('reduce_response', self.handle_reduce_response)
 
     def handle_map_response(self, sock, payload):
         follower_ip_addr = payload[0]

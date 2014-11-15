@@ -26,13 +26,11 @@ class FollowerServer(ProtocolThread):
         master_sock = self.add_socket(loc.master_ip, loc.master_follower_port)
         master_sock.send(own_ip_address)
         self.remove_socket(master_sock)
-        self.commands = {
-            'store_chunk': self.handle_store_chunk,
-            'remove_chunk': self.handle_remove_chunk,
-            'get_chunk': self.handle_get_chunk,
-            'map': self.handle_map,
-            'reduce':  self.handle_reduce
-        }
+        self.add_command('store_chunk', self.handle_store_chunk)
+        self.add_command('remove_chunk', self.handle_remove_chunk)
+        self.add_command('get_chunk', self.handle_get_chunk)
+        self.add_command('map', self.handle_map)
+        self.add_command('reduce',  self.handle_reduce)
 
     def handle_store_chunk(self, sock, payload):
         path = payload[0]
@@ -62,7 +60,7 @@ class FollowerServer(ProtocolThread):
         # Get map payload info
         path = payload[0]
         chunk_id = payload[1]
-        
+
         # Get map module if necessary
         map_fn = combine_fn = None
         if payload[2] != '0':
@@ -72,22 +70,22 @@ class FollowerServer(ProtocolThread):
         if payload[3] != '0':
             combine_mod = deserialize_module(payload[3])
             combine_fn = combine_mod.combine_fn
-            
+
         mapper = Mapper(sock, chunk_id, map_fn, combine_fn)
         mapper.start()
-            
+
     def handle_reduce(self, sock, payload):
         # Get reduce payload info
         path = payload[0]
         result_chunk_id = payload[2]
         map_chunk_ids = payload[3:]
-        
+
         # Get reduce module if necessary
         reduce_fn = None
         if payload[1] != '0':
             reduce_mod = deserialize_module(payload[1])
             reduce_fn = reduce_mod.reduce_fn
-            
+
         reducer = Reducer(sock, result_chunk_id, map_chunk_ids, reduce_fn)
         reducer.start()
 
@@ -137,7 +135,7 @@ class Mapper(Thread):
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)
-                
+
 
 class Reducer(Thread):
 
