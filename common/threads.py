@@ -40,8 +40,8 @@ class ProtocolThread(Thread, TinyDataProtocol):
 
     def select(self):
         socket_dict = {sock.get_socket(): sock for sock in self.socks}
-        read_socks = [sock for sock, tdsock in socket_dict.iteritems() if tdsock.readable()]
-        write_socks = [sock for sock, tdsock in socket_dict.iteritems() if tdsock.writeable()]
+        read_socks = [sock for sock, td_sock in socket_dict.iteritems() if td_sock.readable()]
+        write_socks = [sock for sock, td_sock in socket_dict.iteritems() if td_sock.writeable()]
         ready_for_read, ready_for_write, _ = select.select(read_socks, write_socks, [], DEFAULT_TIMEOUT)
         ready_for_read = map(lambda s: socket_dict[s], ready_for_read)
         ready_for_write = map(lambda s: socket_dict[s], ready_for_write)
