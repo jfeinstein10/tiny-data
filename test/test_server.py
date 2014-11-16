@@ -1,33 +1,18 @@
 import unittest
 
-from common.communication import TinyDataProtocol
-from common.threads import ProtocolThread
-
-
-class TestProtocol(TinyDataProtocol):
-
-    def __init__(self):
-        TinyDataProtocol.__init__(self)
-        self.commands = {
-            'hello': self.handle_hello
-        }
-
-    def handle_hello(self, socket, payload):
-        print payload
+import master.__main__
+import follower.__main__
 
 
 class TestServer(unittest.TestCase):
 
     def test_server(self):
-
-        # Reactive server (just handles incoming connections)
-        ProtocolThread(TestProtocol, 'localhost', 8000, is_server=True).run()
-
-        # Proactive server, initiates a connection with another server
-        thread = ProtocolThread(TestProtocol, 'localhost', 8000, is_server=False)
-        socket = thread.add_socket()
-        socket.queue_command(['hello', 'world'])
-        socket.run()
+        master_threads = master.__main__.main()
+        follower_threads = follower.__main__.main()
+        for thread in master_threads:
+            thread.join()
+        for thread in follower_threads:
+            thread.join()
 
 
 if __name__ == '__main__':
