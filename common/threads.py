@@ -58,8 +58,12 @@ class ProtocolThread(Thread, TinyDataProtocol):
                 try:
                     if not ready.handle_read():
                         self.socks.remove(ready)
+                        if ready in ready_for_write:
+                            ready_for_write.remove(ready)
                 except socket.error, e:
                     self.remove_socket(ready)
+                    if ready in ready_for_write:
+                        ready_for_write.remove(ready)
         # we can write
         for ready in ready_for_write:
             try:

@@ -13,11 +13,16 @@ class ClientThread(ProtocolThread):
         self.complete = False
         self.expected_results = 1
         self.results = 0
+
+        self.data_source = None
+        self.lines_per_chunk = 0
+        self.path = None
+
         self.add_command('ls', self.handle_result)
         self.add_command('rm', self.handle_result)
         self.add_command('mkdir', self.handle_result)
-        self.add_command('cat', self.handle_result)
-        self.add_command('upload_chunk', self.handle_result)
+        self.add_command('get_chunk', self.handle_result)
+        self.add_command('upload_chunk', self.handle_upload)
         self.add_command('remove_chunk', self.handle_result)
         self.add_command('map_reduce', self.handle_result)
 
@@ -39,20 +44,28 @@ class ClientThread(ProtocolThread):
             combine_contents = '0'
         self.sock.queue_command(['map_reduce', path, results_path, map_contents, combine_contents, reduce_contents])
 
+    def handle_upload(self, sock, payload):
+        if payload:
+            print payload[0]
+        self.remove_socket(sock)
+        if self.results == self.expected_results:
+            return
+        self.sock = self.add_socket(loc.master_ip, loc.master_client_port)
+        buff = ''
+        count = 0
+        for line in self.data_source:
+            buff += line
+            count += 1
+            if count == self.lines_per_chunk:
+                break
+        if count < self.lines_per_chunk:
+            self.data_source.close()
+            self.results = self.expected_results
+        self.sock.queue_command(['upload_chunk', self.path, buff])
+
     def send_upload(self, path, local_path, lines_per_chunk):
         print path, local_path, lines_per_chunk
-        self.expected_results = 0
-        with open(local_path, 'r') as local_file:
-            buff = ''
-            count = 0
-            for line in local_file:
-                buff += line
-                count += 1
-                if count % lines_per_chunk == 0:
-                    self.sock.queue_command(['upload_chunk', path, buff])
-                    buff = ''
-                    count = 0
-                    self.expected_results += 1
-            if buff:
-                self.sock.queue_command(['upload_chunk', path, buff])
-                self.expected_results += 1
+        self.data_source = open(local_path, 'r')
+        self.lines_per_chunk = lines_per_chunk
+        self.path = path
+        self.handle_upload(self.sock, None)

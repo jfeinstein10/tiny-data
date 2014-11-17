@@ -23,6 +23,7 @@ class MasterServer(ProtocolThread):
 
     def __init__(self):
         ProtocolThread.__init__(self, 'localhost', loc.master_client_port, is_server=True)
+        self.manipulators = {}
         self.add_command('ls', self.handle_ls)
         self.add_command('rm', self.handle_rm)
         self.add_command('mkdir', self.handle_mkdir)
@@ -96,7 +97,7 @@ class MasterServer(ProtocolThread):
         success = fs.is_file(path) or fs.create_file(path)
         if success:
             manipulator = ChunkManipulator(sock)
-            # self.remove_socket(sock, should_close=False)
+            self.remove_socket(sock, should_close=False)
             manipulator.send_store_chunk(path, chunk)
             manipulator.start()
         else:
@@ -141,41 +142,64 @@ class ChunkManipulator(ProtocolThread):
     def __init__(self, client_sock):
         ProtocolThread.__init__(self, is_server=False)
         self.client_sock = client_sock
-        self.socks.append(self.client_sock)
+        if self.client_sock:
+            self.socks.append(self.client_sock)
+        self.expected_results = 0
+        self.results = 0
         self.add_command('store_chunk', self.handle_store_chunk)
         self.add_command('remove_chunk', self.handle_remove_chunk)
         self.add_command('get_chunk', self.handle_get_chunk)
 
     def handle_store_chunk(self, sock, payload):
-        self.client_sock.queue_command(['upload_chunk', 'chunk stored successfully'])
+        self.results += 1
+        self.remove_socket(sock)
+        if self.results == self.expected_results and self.client_sock:
+            self.client_sock.queue_command(['upload_chunk', 'chunk stored successfully'])
 
     def handle_remove_chunk(self, sock, payload):
-        self.client_sock.queue_command(['remove_chunk', 'removed successfully'])
+        self.results += 1
+        self.remove_socket(sock)
+        if self.results == self.expected_results and self.client_sock:
+            self.client_sock.queue_command(['remove_chunk', 'removed successfully'])
 
     def handle_get_chunk(self, sock, payload):
-        self.client_sock.queue_command(['get_chunk', payload[0]])
+        self.results += 1
+        self.remove_socket(sock)
+        if self.client_sock:
+            self.client_sock.write_partial_command(payload[0])
+            if self.expected_results == self.results:
+                self.client_sock.write_terminator()
 
     def send_store_chunk(self, path, chunk):
+        self.expected_results = 0
         chunk_id = str(uuid.uuid4())
         # Write replications to followers with least storage
         followers_to_write = get_followers_least_filled(REPLICA_TIMES)
         follower_locations = map(lambda f: f.ip_addr, followers_to_write)
         fs.add_chunk_to_file(path, chunk_id, follower_locations)
         for location in follower_locations:
+            self.expected_results += 1
             sock = self.add_socket(location, loc.follower_port)
             sock.queue_command(['store_chunk', path, chunk_id, chunk])
 
     def send_remove(self, path):
+        self.expected_results = 0
         for chunk_id, locations in fs.get_file_chunks(path).iteritems():
             for location in locations:
+                self.expected_results += 1
                 sock = self.add_socket(location, loc.follower_port)
                 sock.queue_command(['remove_chunk', path, chunk_id])
         fs.remove(path)
 
     def send_get(self, path):
+        self.expected_results = 0
+        self.client_sock.write_partial_command('get_chunk')
+        self.client_sock.write_delimiter()
         for chunk_id, locations in fs.get_file_chunks(path).iteritems():
-            sock = self.add_socket(locations[0], loc.follower_port)
-            sock.queue_command(['get_chunk', path, chunk_id])
+            for location in locations:
+                self.expected_results += 1
+                sock = self.add_socket(location, loc.follower_port)
+                sock.queue_command(['get_chunk', path, chunk_id])
 
 
 class MapReduceDispatcher(ProtocolThread):
@@ -183,6 +207,7 @@ class MapReduceDispatcher(ProtocolThread):
     def __init__(self, client_sock, path, path_results, map_mod, combine_mod, reduce_mod):
         ProtocolThread.__init__(self, is_server=False)
         self.client_sock = client_sock
+        self.socks.append(self.client_sock)
         self.path = path
         self.path_results = path_results
         self.map_mod = map_mod
@@ -228,7 +253,7 @@ class MapReduceDispatcher(ProtocolThread):
             self.map_result_chunks[follower_ip_addr].append(result_chunk_id)
             # Assign a new chunk to map
             self.assign_map(follower_ip_addr, sock)
-            if len(self.map_chunks_assigned) == 0:
+            if len(self.map_chunks_completed) == len(self.chunks):
                 self.perform_reduce()
 
     def handle_reduce_response(self, sock, payload):
@@ -256,33 +281,13 @@ class MapReduceDispatcher(ProtocolThread):
             self.remove_socket(sock, True)
 
     def perform_reduce(self):
-        final_keyvals = {}
+        final_buffer = ''
         for key, values in self.map_key_values.iteritems():
-            final_keyvals[key] = self.reduce_fn(key, values)
-        # self.client_sock.queue_command(['map_reduce', 'successful'])
-        manipulator = ChunkManipulator(self.client_sock)
-        manipulator.send_store_chunk(self.path_results, pickle.dumps(final_keyvals))
+            final_buffer += str(key) + ',' + str(self.reduce_fn(key, values)) + '\n'
+        self.client_sock.queue_command(['map_reduce', 'successful'])
+        manipulator = ChunkManipulator(None)
+        manipulator.send_store_chunk(self.path_results, final_buffer)
         manipulator.start()
-        print final_keyvals
-
-    def assign_reduce(self):
-        # Assign reduces
-        results_file = fs._get_file(self.path_results)
-        for follower in self.followers_with_map.values():
-            # Assign the file a chunk for this file
-            results_chunk_id = str(uuid.uuid4())
-            results_chunk = Chunk(results_chunk_id, follower)
-            results_file['chunks'].append(results_chunk)
-            follower.current_task = FollowerTask.REDUCE
-            reduce_mod_out = '0'
-            if self.reduce_mod and not follower.has_reduce_mod:
-                reduce_mod_out = self.reduce_mod
-                follower.has_reduce_mod = True
-            command = ['reduce', reduce_mod_out, results_chunk_id]
-            for map_chunk in follower.map_result_chunks:
-                command.append(map_chunk)
-            follower.sock.queue_command(command)
-            self.outstanding_reduce_followers[follower.ip_addr] = follower
 
     def run(self):
         for follower in followers:

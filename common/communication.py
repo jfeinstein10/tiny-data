@@ -62,6 +62,7 @@ class TinyDataSocket(object):
         data = self.socket.recv(PROTOCOL_PACKET_SIZE)
         if not data:
             self.handle_close()
+            print 'CLOSING SOCKET, NO DATA'
             return False
         else:
             self.handle_data(data)
@@ -112,7 +113,7 @@ class TinyDataProtocolSocket(TinyDataSocket):
                     # Handle the not streaming case
                     if terminator_index >= 0:
                         raw_command = self.read_and_update_buffer(terminator_index, len(self.terminator))
-                        self.current_command.end_callback(self, self.protocol.deserialize_command(raw_command)[1:])
+                        self.current_command.end_callback(self, self.protocol.deserialize_command(raw_command))
                         self.current_command = None
                     else:
                         break
@@ -135,7 +136,7 @@ class TinyDataProtocolSocket(TinyDataSocket):
                         else:
                             # Dump the whole thing and then break
                             raw_response = self.read_and_update_buffer(len(self.read_buffer), 0)
-                            self.current_command.streaming_callback(raw_response)
+                            self.current_command.streaming_callback(self, raw_response)
                             break
                     else:
                         break
@@ -146,6 +147,16 @@ class TinyDataProtocolSocket(TinyDataSocket):
     def queue_command(self, command):
         self.protocol.validate_command(command)
         self.write_buffer += self.protocol.serialize_command(command)
+
+    def write_partial_command(self, command):
+        self.protocol.validate_command(command)
+        self.write_buffer += command
+
+    def write_delimiter(self):
+        self.write_buffer += self.delimiter
+
+    def write_terminator(self):
+        self.write_buffer += self.terminator
 
     def handle_write(self):
         sent = self.send(self.write_buffer[:PROTOCOL_PACKET_SIZE])
@@ -183,7 +194,7 @@ class TinyDataProtocol(object):
         if command in self._commands:
             return self._commands[command]
         else:
-            return ProtocolCommand()
+            return None
 
     def handle_command(self, socket, command):
         if command[0] in self._commands:
@@ -195,7 +206,7 @@ class TinyDataProtocol(object):
         return self.delimiter.join(command) + self.terminator
 
     def deserialize_command(self, command):
-        return command.split(self.delimiter)
+        return command.split(self.delimiter)[1:]
 
     def validate_command(self, command):
         for piece in command:
@@ -205,7 +216,7 @@ class TinyDataProtocol(object):
 
 class ProtocolCommand(object):
 
-    def __init__(self, name='', num_args=0, streaming=False, start_callback=None,
+    def __init__(self, name=None, num_args=0, streaming=False, start_callback=None,
                  streaming_callback=None, end_callback=None):
         self.name = name
         self.num_args = num_args
