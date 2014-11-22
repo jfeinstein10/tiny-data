@@ -14,4 +14,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    follower_threads = main()
+    for thread in follower_threads:
+        thread.join()
