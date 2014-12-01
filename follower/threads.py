@@ -2,7 +2,6 @@ from collections import defaultdict
 import os
 from uuid import uuid4
 import cPickle as pickle
-from threading import Thread
 
 import common.locations as loc
 from common.threads import ProtocolThread
@@ -72,6 +71,7 @@ class FollowerServer(ProtocolThread):
             combine_fn = combine_mod.combine_fn
 
         mapper = Mapper(sock, chunk_id, map_fn, combine_fn)
+        self.remove_socket(sock, should_close=False)
         mapper.start()
 
     def handle_reduce(self, sock, payload):
@@ -87,14 +87,16 @@ class FollowerServer(ProtocolThread):
             reduce_fn = reduce_mod.reduce_fn
 
         reducer = Reducer(sock, result_chunk_id, map_chunk_ids, reduce_fn)
+        self.remove_socket(sock, should_close=False)
         reducer.start()
 
 
-class Mapper(Thread):
+class Mapper(ProtocolThread):
 
     def __init__(self, master_sock, chunk_id, map_fn, combine_fn):
-        Thread.__init__(self)
+        ProtocolThread.__init__(self, is_server=False)
         self.master_sock = master_sock
+        self.socks.append(self.master_sock)
         self.chunk_id = chunk_id
         self.map_fn = map_fn
         self.combine_fn = combine_fn
@@ -135,13 +137,16 @@ class Mapper(Thread):
             for count in counts:
                 command.append(str(count))
             self.master_sock.queue_command(command)
+            while len(self.socks) > 0:
+                self.select_iteration()
 
 
-class Reducer(Thread):
+class Reducer(ProtocolThread):
 
     def __init__(self, master_sock, result_chunk_id, map_chunk_ids, reduce_fn):
-        Thread.__init__(self)
+        ProtocolThread.__init__(self, is_server=False)
         self.master_sock = master_sock
+        self.socks.append(self.master_sock)
         self.result_chunk_id = result_chunk_id
         self.map_chunk_ids = map_chunk_ids
         self.reduce_fn = reduce_fn
@@ -168,3 +173,5 @@ class Reducer(Thread):
             # Send updates to master
             command = ['reduce_response', own_ip_address, str(ReturnStatus.SUCCESS)]
             self.master_sock.queue_command(command)
+            while len(self.socks) > 0:
+                self.select_iteration()
