@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 
-REPLICA_TIMES = 2
+REPLICA_TIMES = 1
 
 
 # a dict-based file system

@@ -67,7 +67,10 @@ class ReturnStatus(object):
 
 
 def get_own_ip_address():
-    return socket.gethostbyname(socket.gethostname())
+    file_name = '/home/pi/tiny-data/my_ip.txt'
+    with open(file_name, 'r') as f:
+        ip_addr = f.readline().strip()
+    return ip_addr
 
 
 def find_nth(haystack, needle, n):

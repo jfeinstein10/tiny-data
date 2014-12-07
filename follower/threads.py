@@ -104,8 +104,11 @@ class Mapper(Thread):
             # Perform map and collect results in dictionary
             counts = []
             result_dict = defaultdict(lambda: [])
+            line_num = 0
             with open(get_filepath(self.chunk_id), 'r') as data:
                 for line in data:
+                    line_num += 1
+                    #print('Mapping line:  ' + str(line_num))
                     response = self.map_fn(line)
                     pairs = response
                     if isinstance(response, tuple):
@@ -113,7 +116,7 @@ class Mapper(Thread):
                         if len(counts) == 0:
                             counts = new_counts
                         else:
-                            counts = map(lambda x: x[0]+x[1], counts, new_counts)
+                            counts = map(lambda x, y: x+y, counts, new_counts)
                     for key, value in pairs:
                         result_dict[key].append(value)
             # Put results into list
@@ -121,6 +124,7 @@ class Mapper(Thread):
             result_list = []
             if self.combine_fn:
                 for key in result_dict:
+                    #print('Combining for key:  ' + str(key))
                     result_list.append((key, self.combine_fn(result_dict[key])))
             else:
                 for key in result_dict:

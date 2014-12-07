@@ -1,6 +1,6 @@
 import argparse
 
-from client.threads import ClientThread
+from threads import ClientThread
 
 
 parser = argparse.ArgumentParser()
@@ -30,6 +30,18 @@ upload_parser.add_argument('path', help='Store the data in the DFS at this path'
 upload_parser.add_argument('local_path', help='Upload the file at this path')
 upload_parser.add_argument('lines_per_chunk', type=int, help='The number of lines to include in each chunk')
 
+def process_command(arg_list):
+    args = parser.parse_args()
+
+    c_thread = ClientThread()
+    if args.command in ['ls', 'rm', 'mkdir', 'cat']:
+        c_thread.send_simple(args.command, args.path)
+    elif args.command == 'map_reduce':
+        c_thread.send_map_reduce(args.path, args.results_path, args.map, args.reduce, args.combine)
+    elif args.command == 'upload':
+        c_thread.send_upload(args.path, args.local_path, args.lines_per_chunk)
+    c_thread.start()
+    c_thread.join()
 
 def main():
     args = parser.parse_args()

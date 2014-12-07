@@ -5,8 +5,9 @@ import cPickle as pickle
 import common.locations as loc
 from common.communication import TinyDataProtocolSocket
 from common.threads import ProtocolThread
-from common.util import ReturnStatus, deserialize_module
-from master.file_system import FileSystem, REPLICA_TIMES
+from common.util import *
+from file_system import FileSystem, REPLICA_TIMES
+
 
 
 followers = []
@@ -17,12 +18,14 @@ class Follower(object):
 
     def __init__(self, ip_addr):
         self.ip_addr = ip_addr
+        self.bytes_stored = 0
+
 
 
 class MasterServer(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, 'localhost', loc.master_client_port, is_server=True)
+        ProtocolThread.__init__(self, loc.master_ip, loc.master_client_port, is_server=True)
         self.manipulators = {}
         self.add_command('ls', self.handle_ls)
         self.add_command('rm', self.handle_rm)
@@ -121,7 +124,7 @@ class MasterServer(ProtocolThread):
 class FollowerAcceptor(ProtocolThread):
 
     def __init__(self):
-        ProtocolThread.__init__(self, 'localhost', loc.master_follower_port, is_server=True)
+        ProtocolThread.__init__(self, loc.master_ip, loc.master_follower_port, is_server=True)
 
     def run(self):
         while len(self.socks) > 0:
@@ -176,6 +179,8 @@ class ChunkManipulator(ProtocolThread):
         # Write replications to followers with least storage
         followers_to_write = get_followers_least_filled(REPLICA_TIMES)
         follower_locations = map(lambda f: f.ip_addr, followers_to_write)
+        for follower in followers_to_write:
+            follower.bytes_stored += len(chunk)
         fs.add_chunk_to_file(path, chunk_id, follower_locations)
         for location in follower_locations:
             self.expected_results += 1
@@ -283,7 +288,8 @@ class MapReduceDispatcher(ProtocolThread):
     def perform_reduce(self):
         final_buffer = ''
         for key, values in self.map_key_values.iteritems():
-            final_buffer += str(key) + ',' + str(self.reduce_fn(key, values)) + '\n'
+            #print('Reducing for key:  ' + str(key))
+            final_buffer += str(key) + ' ' + str(self.reduce_fn(key, values)) + '\n'
         self.client_sock.queue_command(['map_reduce', 'successful'])
         manipulator = ChunkManipulator(None)
         manipulator.send_store_chunk(self.path_results, final_buffer)

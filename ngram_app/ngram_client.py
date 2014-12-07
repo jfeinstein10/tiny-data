@@ -1,11 +1,28 @@
-from client.threads import *
+from threads import *
+import time
+import timeit
+
+
+
+def upload():
+    client = ClientThread()
+    client.send_upload('/kjbible_small.txt', 'kjbible_small.txt', 1000)
+    client.start()
+    client.join()
+
+
+
+def mapreduce():
+    client = ClientThread()
+    client.send_map_reduce('/kjbible_small.txt', '/kjbible_small_r.txt', 'ngram_count_map.py', 'ngram_count_reduce.py', 'ngram_count_combine.py')
+    client.start()
+    client.join()
 
 
 
 def main():
-    client = ClientThread()
-    client.send_upload('kjbible.txt', 'kjbible.txt', 1000)
-    client.send_map_reduce('kjbible.txt', 'kjbible_results.txt', job_contents)  # agree on this
+    print timeit.timeit(upload, number=1)
+    print timeit.timeit(mapreduce, number=1)
 
 
 
