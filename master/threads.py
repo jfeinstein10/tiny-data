@@ -258,7 +258,8 @@ class MapReduceDispatcher(ProtocolThread):
             self.map_chunks_completed.append(chunk_id)
             self.map_result_chunks[follower_ip_addr].append(result_chunk_id)
             # Assign a new chunk to map
-            self.assign_map(follower_ip_addr, sock)
+            self.remove_socket(sock, True)
+            self.assign_map(follower_ip_addr)
             if len(self.map_chunks_completed) == len(self.chunks):
                 self.perform_reduce()
 
