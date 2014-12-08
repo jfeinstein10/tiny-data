@@ -118,7 +118,7 @@ class Mapper(ProtocolThread):
                         if len(counts) == 0:
                             counts = new_counts
                         else:
-                            counts = map(lambda x: x[0]+x[1], counts, new_counts)
+                            counts = map(lambda x, y: x+y, counts, new_counts)
                     for key, value in pairs:
                         result_dict[key].append(value)
             # Put results into list
