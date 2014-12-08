@@ -116,9 +116,10 @@ class MasterServer(ProtocolThread):
         reduce_mod = payload[4]
         if self.validate_file('map_reduce', sock, path) and fs.create_file(path_results):
             mr_dispatcher = MapReduceDispatcher(sock, path, path_results, map_mod, combine_mod, reduce_mod)
+            self.remove_socket(sock, should_close=False)
             mr_dispatcher.start()
         else:
-            sock.queue_command(['map_reduce_response', 'unsuccessful'])
+            sock.queue_command(['map_reduce', 'unsuccessful'])
 
 
 class FollowerAcceptor(ProtocolThread):
@@ -239,7 +240,7 @@ class MapReduceDispatcher(ProtocolThread):
         follower_ip_addr = payload[0]
         return_status = int(payload[1])
         if not (return_status == ReturnStatus.SUCCESS):
-            self.client_sock.queue_command(['map_reduce_response', 'unsuccessful'])
+            self.client_sock.queue_command(['map_reduce', 'unsuccessful'])
         else:
             chunk_id = payload[2]
             result_chunk_id = payload[3]
@@ -266,9 +267,9 @@ class MapReduceDispatcher(ProtocolThread):
         return_status = int(payload[1])
         if return_status == ReturnStatus.SUCCESS:
             self.outstanding_reduce_followers.pop(follower_ip_addr)
-            self.client_sock.queue_command(['map_reduce_response', 'successful'])
+            self.client_sock.queue_command(['map_reduce', 'successful'])
         else:
-            self.client_sock.queue_command(['map_reduce_response', 'unsuccessful'])
+            self.client_sock.queue_command(['map_reduce', 'unsuccessful'])
 
     def assign_map(self, follower_ip, sock=None):
         # Assign all pieces to mapped

@@ -1,8 +1,8 @@
-
+import re
 
 def map_fn(line):
-    words = line.split(',')
-    return [(word.strip(), 1) for word in words]
+    words = re.findall(r"[\w']+", line)
+    return [(word.strip().lower(), 1) for word in words]
 
 
 def reduce_fn(key, values):
