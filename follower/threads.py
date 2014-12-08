@@ -7,6 +7,9 @@ import common.locations as loc
 from common.threads import ProtocolThread
 from common.util import get_filepath, deserialize_module, ReturnStatus, get_tinydata_base, get_own_ip_address
 
+import timeit
+
+
 
 own_ip_address = get_own_ip_address()
 
@@ -101,49 +104,51 @@ class Mapper(ProtocolThread):
         self.map_fn = map_fn
         self.combine_fn = combine_fn
 
+    def perform_map(self):
+        try:
+            # Perform map and collect results in dictionary
+            counts = []
+            result_dict = defaultdict(lambda: [])
+            with open(get_filepath(self.chunk_id), 'r') as data:
+                for line in data:
+                    response = self.map_fn(line)
+                    pairs = response
+                    if isinstance(response, tuple):
+                        pairs, new_counts = response
+                        if len(counts) == 0:
+                            counts = new_counts
+                        else:
+                            counts = map(lambda x: x[0]+x[1], counts, new_counts)
+                    for key, value in pairs:
+                        result_dict[key].append(value)
+            # Put results into list
+            # Use combine function if supplied
+            result_list = []
+            if self.combine_fn:
+                for key in result_dict:
+                    result_list.append((key, self.combine_fn(result_dict[key])))
+            else:
+                for key in result_dict:
+                    for val in result_dict[key]:
+                        result_list.append((key, val))
+            # Pickle results into written file
+            results_chunk_id = get_next_free_chunk()
+            with open(get_filepath(results_chunk_id), 'w') as f:
+                pickle.dump(result_list, f)
+            # Send updates to master
+            command = ['map_response', own_ip_address, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id), pickle.dumps(result_list)]
+            for count in counts:
+                command.append(str(count))
+            self.master_sock.queue_command(command)
+        except Exception, e:
+            print e
+            self.master_sock.queue_command(['map_response', own_ip_address, str(ReturnStatus.FAIL)])
+
     def run(self):
         if self.map_fn:
-            try:
-                # Perform map and collect results in dictionary
-                counts = []
-                result_dict = defaultdict(lambda: [])
-                with open(get_filepath(self.chunk_id), 'r') as data:
-                    for line in data:
-                        response = self.map_fn(line)
-                        pairs = response
-                        if isinstance(response, tuple):
-                            pairs, new_counts = response
-                            if len(counts) == 0:
-                                counts = new_counts
-                            else:
-                                counts = map(lambda x: x[0]+x[1], counts, new_counts)
-                        for key, value in pairs:
-                            result_dict[key].append(value)
-                # Put results into list
-                # Use combine function if supplied
-                result_list = []
-                if self.combine_fn:
-                    for key in result_dict:
-                        result_list.append((key, self.combine_fn(result_dict[key])))
-                else:
-                    for key in result_dict:
-                        for val in result_dict[key]:
-                            result_list.append((key, val))
-                # Pickle results into written file
-                results_chunk_id = get_next_free_chunk()
-                with open(get_filepath(results_chunk_id), 'w') as f:
-                    pickle.dump(result_list, f)
-                # Send updates to master
-                command = ['map_response', own_ip_address, str(ReturnStatus.SUCCESS), self.chunk_id, str(results_chunk_id), pickle.dumps(result_list)]
-                for count in counts:
-                    command.append(str(count))
-                self.master_sock.queue_command(command)
-            except Exception, e:
-                print e
-                self.master_sock.queue_command(['map_response', own_ip_address, str(ReturnStatus.FAIL)])
-            finally:
-                while len(self.socks) > 0:
-                    self.select_iteration()
+            print ('Map time:  ' + str(timeit.timeit(self.perform_map, number=1)))
+            while len(self.socks) > 0:
+                self.select_iteration()
 
 
 class Reducer(ProtocolThread):

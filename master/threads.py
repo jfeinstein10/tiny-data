@@ -7,6 +7,7 @@ from common.communication import TinyDataProtocolSocket
 from common.threads import ProtocolThread
 from common.util import *
 from file_system import FileSystem, REPLICA_TIMES
+import timeit
 
 
 
@@ -261,7 +262,7 @@ class MapReduceDispatcher(ProtocolThread):
             self.remove_socket(sock, True)
             self.assign_map(follower_ip_addr)
             if len(self.map_chunks_completed) == len(self.chunks):
-                self.perform_reduce()
+                print ('Reduce Time:  ' + str(timeit.timeit(self.perform_reduce, number=1)))
 
     def handle_reduce_response(self, sock, payload):
         follower_ip_addr = payload[0]
