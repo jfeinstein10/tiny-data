@@ -8,7 +8,7 @@ class TestServer(unittest.TestCase):
 
     def test_server(self):
         master_threads = master.__main__.main()
-        follower_threads = follower.__main__.main()
+        follower_threads = follower.__main__.main('localhost')
         for thread in master_threads:
             thread.join()
         for thread in follower_threads:

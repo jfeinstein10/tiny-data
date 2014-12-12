@@ -7,9 +7,10 @@ from common.util import serialize_module
 
 class ClientThread(ProtocolThread):
 
-    def __init__(self):
+    def __init__(self, master_ip):
         ProtocolThread.__init__(self, is_server=False)
-        self.sock = self.add_socket(loc.master_ip, loc.master_client_port)
+        self.master_ip = master_ip
+        self.sock = self.add_socket(master_ip, loc.master_client_port)
         self.complete = False
         self.expected_results = 1
         self.results = 0
@@ -50,7 +51,7 @@ class ClientThread(ProtocolThread):
         self.remove_socket(sock)
         if self.results == self.expected_results:
             return
-        self.sock = self.add_socket(loc.master_ip, loc.master_client_port)
+        self.sock = self.add_socket(self.master_ip, loc.master_client_port)
         buff = ''
         count = 0
         for line in self.data_source:

@@ -20,9 +20,9 @@ def get_next_free_chunk():
 
 class FollowerServer(ProtocolThread):
 
-    def __init__(self):
-        ProtocolThread.__init__(self, own_ip_address, loc.follower_port, is_server=True)
-        master_sock = self.add_socket(loc.master_ip, loc.master_follower_port)
+    def __init__(self, master_ip):
+        ProtocolThread.__init__(self, 'localhost', loc.follower_port, is_server=True)
+        master_sock = self.add_socket(master_ip, loc.master_follower_port)
         master_sock.send(own_ip_address)
         self.remove_socket(master_sock)
         self.add_command('store_chunk', self.handle_store_chunk)
@@ -116,7 +116,7 @@ class Mapper(ProtocolThread):
                             if len(counts) == 0:
                                 counts = new_counts
                             else:
-                                counts = map(lambda x: x[0]+x[1], counts, new_counts)
+                                counts = map(lambda x, y: x+y, counts, new_counts)
                         for key, value in pairs:
                             result_dict[key].append(value)
                 # Put results into list

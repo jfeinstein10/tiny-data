@@ -11,6 +11,7 @@ PROTOCOL_PACKET_SIZE = 8192
 PROTOCOL_TERMINATOR = '\0\0'
 PROTOCOL_DELIMITER = '\1\1'
 
+
 class TinyDataSocket(object):
 
     def __init__(self, sock=None, is_readable=False, is_writeable=False, use_ssl=False):

@@ -1,6 +1,7 @@
 import imp
 import os
-import socket
+import urllib
+import re
 import tempfile
 import zlib
 
@@ -67,7 +68,10 @@ class ReturnStatus(object):
 
 
 def get_own_ip_address():
-    return socket.gethostbyname(socket.gethostname())
+    site = urllib.urlopen("http://checkip.dyndns.org/").read()
+    grab = re.findall('([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)', site)
+    address = grab[0]
+    return address
 
 
 def find_nth(haystack, needle, n):

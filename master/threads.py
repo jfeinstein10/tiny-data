@@ -176,6 +176,8 @@ class ChunkManipulator(ProtocolThread):
         chunk_id = str(uuid.uuid4())
         # Write replications to followers with least storage
         followers_to_write = get_followers_least_filled(REPLICA_TIMES)
+        for follower in followers_to_write:
+            follower.bytes_stored += len(chunk)
         follower_locations = map(lambda f: f.ip_addr, followers_to_write)
         fs.add_chunk_to_file(path, chunk_id, follower_locations)
         for location in follower_locations:

@@ -4,6 +4,7 @@ from client.threads import ClientThread
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('master_ip', help='The public IP address of the master machine')
 subparsers = parser.add_subparsers(dest='command')
 
 ls_parser = subparsers.add_parser('ls')
@@ -34,7 +35,7 @@ upload_parser.add_argument('lines_per_chunk', type=int, help='The number of line
 def main():
     args = parser.parse_args()
 
-    c_thread = ClientThread()
+    c_thread = ClientThread(args.master_ip)
     if args.command in ['ls', 'rm', 'mkdir', 'cat']:
         c_thread.send_simple(args.command, args.path)
     elif args.command == 'map_reduce':
